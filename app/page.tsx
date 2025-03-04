@@ -1293,70 +1293,7 @@ export default function Home() {
                 <TabsContent value='report'>
                   {state.report && (
                     <Card>
-                      <CardContent className='p-6 space-y-6'>
-                        <Collapsible
-                          open={state.isSourcesOpen}
-                          onOpenChange={(open) =>
-                            updateState({ isSourcesOpen: open })
-                          }
-                          className='w-full border rounded-lg p-2'
-                        >
-                          <CollapsibleTrigger className='flex items-center justify-between w-full'>
-                            <span className='text-sm font-medium'>
-                              Overview
-                            </span>
-                            <ChevronDown
-                              className={`h-4 w-4 transition-transform ${
-                                state.isSourcesOpen
-                                  ? 'transform rotate-180'
-                                  : ''
-                              }`}
-                            />
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className='space-y-4 mt-2'>
-                            <div className='text-sm text-gray-600 bg-gray-50 p-3 rounded'>
-                              <p className='font-medium text-gray-700'>
-                                {state.status.fetchStatus.successful} of{' '}
-                                {state.report?.sources?.length || 0} sources
-                                fetched successfully
-                              </p>
-                            </div>
-                            <div className='space-y-2'>
-                              {state.report?.sources?.map((source) => (
-                                <div key={source.id} className='text-gray-600'>
-                                  <div className='flex items-center gap-2'>
-                                    <a
-                                      href={source.url}
-                                      target='_blank'
-                                      rel='noopener noreferrer'
-                                      className='text-blue-600 hover:underline'
-                                    >
-                                      {source.name}
-                                    </a>
-                                    <span
-                                      className={`text-xs px-1.5 py-0.5 rounded ${
-                                        state.status.fetchStatus.sourceStatuses[
-                                          source.url
-                                        ] === 'fetched'
-                                          ? 'bg-green-100 text-green-700'
-                                          : 'bg-yellow-50 text-yellow-600'
-                                      }`}
-                                    >
-                                      {state.status.fetchStatus.sourceStatuses[
-                                        source.url
-                                      ] === 'fetched'
-                                        ? 'fetched'
-                                        : 'preview'}
-                                    </span>
-                                  </div>
-                                  <p className='text-sm text-gray-500'>
-                                    {source.url}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
+                      <CardContent className='p-6 space-y-4'>
                         <div className='flex flex-col-reverse sm:flex-row sm:justify-between sm:items-start gap-4'>
                           <h2 className='text-2xl font-bold text-gray-800 text-center sm:text-left'>
                             {state.report?.title}
@@ -1369,23 +1306,30 @@ export default function Home() {
                         <p className='text-lg text-gray-700'>
                           {state.report?.summary}
                         </p>
-                        {state.report?.sections?.map((section, index) => (
-                          <div key={index} className='space-y-2 border-t pt-4'>
-                            <h3 className='text-xl font-semibold text-gray-700'>
-                              {section.title}
-                            </h3>
-                            <div className='prose max-w-none text-gray-600'>
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {section.content}
-                              </ReactMarkdown>
-                            </div>
-                          </div>
-                        ))}
 
-                        {/* Citations Section */}
-                        {state.report && (
-                          <CitationsFooter report={state.report} />
-                        )}
+                        {/* Scrollable content area for sections and citations */}
+                        <div className='max-h-[600px] overflow-y-auto pr-2'>
+                          {state.report?.sections?.map((section, index) => (
+                            <div
+                              key={index}
+                              className='space-y-2 border-t pt-4'
+                            >
+                              <h3 className='text-xl font-semibold text-gray-700'>
+                                {section.title}
+                              </h3>
+                              <div className='prose max-w-none text-gray-600'>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {section.content}
+                                </ReactMarkdown>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Citations Section */}
+                          {state.report && (
+                            <CitationsFooter report={state.report} />
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
                   )}

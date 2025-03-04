@@ -137,17 +137,20 @@ export function ReportContent({ id }: any) {
             <h2>Summary</h2>
             <p>{report.report.summary}</p>
 
-            {report.report.sections.map((section, index) => (
-              <div key={index}>
-                <h2>{section.title}</h2>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {section.content}
-                </ReactMarkdown>
-              </div>
-            ))}
+            {/* Scrollable content area for sections and citations */}
+            <div className='max-h-[600px] overflow-y-auto pr-2 mt-4'>
+              {report.report.sections.map((section, index) => (
+                <div key={index}>
+                  <h2>{section.title}</h2>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {section.content}
+                  </ReactMarkdown>
+                </div>
+              ))}
 
-            {/* Citations Section */}
-            <CitationsFooter report={report.report} />
+              {/* Citations Section */}
+              <CitationsFooter report={report.report} />
+            </div>
           </div>
         </Card>
       </div>

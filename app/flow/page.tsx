@@ -932,7 +932,7 @@ export default function FlowPage() {
             ...node.data,
             id: node.id,
             error: undefined, // Clear any error state
-            loading: false,   // Reset loading state
+            loading: false, // Reset loading state
           }
 
           if (node.type === 'reportNode') {
