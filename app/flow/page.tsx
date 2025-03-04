@@ -20,6 +20,8 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
   MiniMap,
+  useReactFlow,
+  ReactFlowProvider,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Button } from '@/components/ui/button'
@@ -44,6 +46,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+
+// Import the new utility functions
+import {
+  createDebouncedViewportSave,
+  createDebouncedNodesSave,
+  createDebouncedEdgesSave,
+  restoreViewportFromProject,
+} from '@/lib/localStorage-utils'
+
+// Constants for localStorage keys - Now using project-based viewport storage
 
 // Node type definitions
 const nodeTypes: NodeTypes = {
@@ -716,7 +728,8 @@ function useConsolidation(
   }
 }
 
-export default function FlowPage() {
+// Function to wrap the Flow component with ReactFlowProvider to enable useReactFlow
+function Flow() {
   const [nodes, setNodes] = useState<ResearchNode[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [query, setQuery] = useState('')
@@ -742,23 +755,208 @@ export default function FlowPage() {
     simpleSave,
   } = useFlowProjects()
 
-  // Node and edge change handlers - memoized
+  // Get ReactFlow instance to access viewport
+  const reactFlowInstance = useReactFlow()
+
+  // Create stable references for the save functions
+  const saveViewportRef = useRef<Function | null>(null)
+  const saveNodesRef = useRef<Function | null>(null)
+  const saveEdgesRef = useRef<Function | null>(null)
+
+  // Update the function references when dependencies change
+  useEffect(() => {
+    // Create the save functions only when the project or update function changes
+    if (!currentProject) return
+
+    // Use function that captures the current values but doesn't create
+    // a dependency on them, to avoid recreating functions on every node/edge change
+    saveViewportRef.current = createDebouncedViewportSave(
+      () => reactFlowInstance.getViewport(),
+      currentProject,
+      updateCurrentProject
+    )
+
+    saveNodesRef.current = createDebouncedNodesSave(
+      // Capture latest nodes via callback
+      () => nodes,
+      currentProject,
+      updateCurrentProject
+    )
+
+    saveEdgesRef.current = createDebouncedEdgesSave(
+      // Capture latest edges via callback
+      () => edges,
+      currentProject,
+      updateCurrentProject
+    )
+
+    console.log('Recreated debounced save functions')
+
+    // Cleanup when project changes
+    return () => {
+      saveViewportRef.current = null
+      saveNodesRef.current = null
+      saveEdgesRef.current = null
+    }
+  }, [currentProject, reactFlowInstance, updateCurrentProject])
+
+  // Stable callback wrappers that use the refs
+  const saveViewport = useCallback(() => {
+    if (saveViewportRef.current && currentProject && hasInitialized.current) {
+      saveViewportRef.current()
+    }
+  }, [currentProject])
+
+  const saveNodes = useCallback(() => {
+    if (saveNodesRef.current && currentProject && hasInitialized.current) {
+      saveNodesRef.current()
+    }
+  }, [currentProject])
+
+  const saveEdges = useCallback(() => {
+    if (saveEdgesRef.current && currentProject && hasInitialized.current) {
+      saveEdgesRef.current()
+    }
+  }, [currentProject])
+
+  // Node changes handler with stable callback
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) =>
-      setNodes((nds) => applyNodeChanges(changes, nds)),
-    []
+    (changes: NodeChange[]) => {
+      const updatedNodes = applyNodeChanges(changes, nodes)
+      setNodes(updatedNodes)
+
+      // Skip if no current project or during initialization
+      if (!currentProject || !hasInitialized.current) return
+
+      // Use our debounced save function
+      saveNodes()
+    },
+    [nodes, currentProject, saveNodes]
   )
 
+  // Edge changes handler
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) =>
-      setEdges((eds) => applyEdgeChanges(changes, eds)),
-    []
+    (changes: EdgeChange[]) => {
+      const updatedEdges = applyEdgeChanges(changes, edges)
+      setEdges(updatedEdges)
+
+      // Skip if no current project or during initialization
+      if (!currentProject || !hasInitialized.current) return
+
+      // Use our debounced save function
+      saveEdges()
+    },
+    [edges, currentProject, saveEdges]
   )
 
+  // Connection handler
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    []
+    (params: Connection) => {
+      const newEdges = addEdge(params, edges)
+      setEdges(newEdges)
+
+      // Skip if no current project or during initialization
+      if (!currentProject || !hasInitialized.current) return
+
+      // Immediately save connections (less frequent operation)
+      updateCurrentProject({ edges: newEdges })
+    },
+    [edges, currentProject, updateCurrentProject]
   )
+
+  // Viewport change handler
+  const onMoveEnd = useCallback(() => {
+    if (currentProject && hasInitialized.current) {
+      saveViewport()
+    }
+  }, [currentProject, saveViewport])
+
+  // Load data from the current project - using a ref to prevent repeated execution
+  const currentProjectIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    // If the project is null or ID hasn't changed, skip the effect
+    if (!currentProject || currentProjectIdRef.current === currentProject.id) {
+      return
+    }
+
+    console.log(`Loading project: ${currentProject.name}`)
+    hasInitialized.current = false
+    currentProjectIdRef.current = currentProject.id
+
+    // Set the nodes and edges from the project
+    setNodes(currentProject.nodes || [])
+    setEdges(currentProject.edges || [])
+    setQuery(currentProject.query || '')
+    setSelectedReports(currentProject.selectedReports || [])
+
+    // Restore the viewport for this project using our utility
+    let viewportTimer: NodeJS.Timeout | null = null
+    if (currentProject.viewport && reactFlowInstance) {
+      try {
+        // Use a slight delay to ensure the nodes have been rendered
+        viewportTimer = setTimeout(() => {
+          if (reactFlowInstance && currentProject.viewport) {
+            reactFlowInstance.setViewport(currentProject.viewport!)
+            console.log(`Viewport restored for project: ${currentProject.name}`)
+          }
+        }, 100)
+      } catch (error) {
+        console.error('Failed to restore project viewport:', error)
+      }
+    }
+
+    // Mark as initialized after a short delay
+    const initTimer = setTimeout(() => {
+      hasInitialized.current = true
+      console.log(`Project ${currentProject.name} fully initialized`)
+    }, 200)
+
+    // Cleanup the timers if component unmounts
+    return () => {
+      if (viewportTimer) clearTimeout(viewportTimer)
+      clearTimeout(initTimer)
+    }
+  }, [currentProject, reactFlowInstance])
+
+  // Detect when we're dealing with a fresh project with no nodes
+  const hasDetectedNewFlowRef = useRef<boolean>(false)
+
+  useEffect(() => {
+    if (
+      currentProject &&
+      currentProject.nodes.length === 0 &&
+      nodes.length > 0 &&
+      hasInitialized.current &&
+      !hasDetectedNewFlowRef.current
+    ) {
+      // This is a new flow with nodes but the current project doesn't have them yet
+      console.log('Detected new flow - saving initial state')
+      hasDetectedNewFlowRef.current = true
+
+      // Save the current state to the project
+      updateCurrentProject({
+        nodes,
+        edges,
+        query,
+        selectedReports,
+        viewport: reactFlowInstance.getViewport(),
+      })
+    }
+
+    // Reset the detection flag when the project changes
+    if (!currentProject || currentProject.nodes.length > 0) {
+      hasDetectedNewFlowRef.current = false
+    }
+  }, [
+    currentProject,
+    nodes,
+    edges,
+    query,
+    selectedReports,
+    reactFlowInstance,
+    updateCurrentProject,
+  ])
 
   // ULTRA-SIMPLE Report selection handler - directly updates both state and nodes in one go
   const handleReportSelect = useCallback(
@@ -1266,10 +1464,12 @@ export default function FlowPage() {
           onConnect={onConnect}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          fitView
+          fitView={
+            nodes.length > 0 && !currentProject?.nodes?.length ? true : false
+          }
           minZoom={0.1}
           maxZoom={1.5}
-          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          onMoveEnd={onMoveEnd}
           className='transition-all duration-200'
         >
           <MiniMap
@@ -1286,5 +1486,14 @@ export default function FlowPage() {
         </ReactFlow>
       </div>
     </div>
+  )
+}
+
+// Export the flow component wrapped with ReactFlowProvider
+export default function FlowPage() {
+  return (
+    <ReactFlowProvider>
+      <Flow />
+    </ReactFlowProvider>
   )
 }

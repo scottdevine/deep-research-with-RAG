@@ -16,6 +16,11 @@ export interface FlowProject {
   edges: Edge[]
   query: string
   selectedReports: string[]
+  viewport?: {
+    x: number
+    y: number
+    zoom: number
+  }
 }
 
 interface StorageInfo {

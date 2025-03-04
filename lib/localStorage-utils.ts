@@ -1,6 +1,5 @@
-/**
- * Utilities for working with localStorage
- */
+import type { Viewport } from '@xyflow/react'
+import type { FlowProject } from '@/hooks/use-flow-projects'
 
 /**
  * Gets the current localStorage usage in bytes and as a percentage of the available space
@@ -114,4 +113,146 @@ export function importFlowProjects(jsonProjects: string): boolean {
     console.error('Failed to import projects:', error)
     return false
   }
+}
+
+/**
+ * Creates a debounced function that delays invoking func until after wait milliseconds have elapsed
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null
+
+  return function (...args: Parameters<T>) {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+
+    timeout = setTimeout(() => {
+      func(...args)
+      timeout = null
+    }, wait)
+  }
+}
+
+/**
+ * Saves viewport state to the current project
+ */
+export function saveViewportToProject(
+  project: FlowProject | null,
+  viewport: Viewport,
+  updateProject: (data: Partial<Omit<FlowProject, 'id' | 'createdAt'>>) => void
+): void {
+  if (!project) return
+
+  try {
+    updateProject({
+      viewport,
+    })
+    console.log(`Viewport saved for project: ${project.name}`)
+  } catch (error) {
+    console.error('Failed to save viewport to project:', error)
+  }
+}
+
+/**
+ * Restores viewport state from the current project
+ */
+export function restoreViewportFromProject(
+  project: FlowProject | null,
+  setViewport: (viewport: Viewport) => void
+): boolean {
+  if (!project?.viewport) return false
+
+  try {
+    setViewport(project.viewport)
+    console.log(`Viewport restored for project: ${project.name}`)
+    return true
+  } catch (error) {
+    console.error('Failed to restore project viewport:', error)
+    return false
+  }
+}
+
+/**
+ * Creates a debounced viewport save function
+ */
+export function createDebouncedViewportSave(
+  getViewport: () => Viewport,
+  project: FlowProject | null,
+  updateProject: (data: Partial<Omit<FlowProject, 'id' | 'createdAt'>>) => void,
+  debounceTime: number = 500
+): () => void {
+  return debounce(() => {
+    saveViewportToProject(project, getViewport(), updateProject)
+  }, debounceTime)
+}
+
+/**
+ * Saves nodes to the current project
+ */
+export function saveNodesToProject<NodeType extends { id: string }>(
+  project: FlowProject | null,
+  nodes: NodeType[],
+  updateProject: (data: Partial<Omit<FlowProject, 'id' | 'createdAt'>>) => void
+): void {
+  if (!project) return
+
+  try {
+    updateProject({
+      nodes: nodes as any[],
+    })
+    console.log(`Nodes saved for project: ${project.name}`)
+  } catch (error) {
+    console.error('Failed to save nodes to project:', error)
+  }
+}
+
+/**
+ * Saves edges to the current project
+ */
+export function saveEdgesToProject<EdgeType extends { id: string }>(
+  project: FlowProject | null,
+  edges: EdgeType[],
+  updateProject: (data: Partial<Omit<FlowProject, 'id' | 'createdAt'>>) => void
+): void {
+  if (!project) return
+
+  try {
+    updateProject({
+      edges: edges as any[],
+    })
+    console.log(`Edges saved for project: ${project.name}`)
+  } catch (error) {
+    console.error('Failed to save edges to project:', error)
+  }
+}
+
+/**
+ * Creates a debounced nodes save function
+ */
+export function createDebouncedNodesSave<NodeType extends { id: string }>(
+  getNodes: () => NodeType[],
+  project: FlowProject | null,
+  updateProject: (data: Partial<Omit<FlowProject, 'id' | 'createdAt'>>) => void,
+  debounceTime: number = 500
+): () => void {
+  return debounce(() => {
+    saveNodesToProject(project, getNodes(), updateProject)
+  }, debounceTime)
+}
+
+/**
+ * Creates a debounced edges save function
+ */
+export function createDebouncedEdgesSave<EdgeType extends { id: string }>(
+  getEdges: () => EdgeType[],
+  project: FlowProject | null,
+  updateProject: (data: Partial<Omit<FlowProject, 'id' | 'createdAt'>>) => void,
+  debounceTime: number = 500
+): () => void {
+  return debounce(() => {
+    saveEdgesToProject(project, getEdges(), updateProject)
+  }, debounceTime)
 }
