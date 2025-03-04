@@ -145,7 +145,7 @@ export function ReportContent({ id }: any) {
                 </ReactMarkdown>
               </div>
             ))}
-            
+
             {/* Citations Section */}
             <CitationsFooter report={report.report} />
           </div>

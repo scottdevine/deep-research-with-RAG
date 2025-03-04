@@ -1381,9 +1381,11 @@ export default function Home() {
                             </div>
                           </div>
                         ))}
-                        
+
                         {/* Citations Section */}
-                        {state.report && <CitationsFooter report={state.report} />}
+                        {state.report && (
+                          <CitationsFooter report={state.report} />
+                        )}
                       </CardContent>
                     </Card>
                   )}

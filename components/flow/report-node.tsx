@@ -85,7 +85,7 @@ export const ReportNode = memo(function ReportNode({
                       </div>
                     </div>
                   ))}
-                  
+
                   {/* Citations Section */}
                   <CitationsFooter report={report} />
                 </div>

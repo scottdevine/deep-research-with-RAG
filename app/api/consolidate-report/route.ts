@@ -33,6 +33,29 @@ export async function POST(request: Request) {
       )
     }
 
+    // Collect all unique sources from all reports
+    const allSources: { id: string; url: string; name: string }[] = []
+    const sourceMap = new Map<string, number>() // Maps source id to index in allSources
+
+    reports.forEach((report: Report) => {
+      if (report.sources && report.sources.length > 0) {
+        report.sources.forEach((source) => {
+          if (!sourceMap.has(source.id)) {
+            sourceMap.set(source.id, allSources.length)
+            allSources.push(source)
+          }
+        })
+      }
+    })
+
+    // Create source index for citations
+    const sourceIndex = allSources
+      .map(
+        (source, index) =>
+          `[${index + 1}] Source: ${source.name} - ${source.url}`
+      )
+      .join('\n')
+
     const prompt = `Create a comprehensive consolidated report that synthesizes the following research reports:
 
 ${reports
@@ -48,18 +71,23 @@ ${report.sections
   )
   .join('\n\n')}
 
+Sources for citation:
+${sourceIndex}
+
 Analyze and synthesize these reports to create a comprehensive consolidated report that:
 1. Identifies common themes and patterns across the reports
 2. Highlights key insights and findings
 3. Shows how different reports complement or contrast each other
 4. Draws overarching conclusions
 5. Suggests potential areas for further research
+6. Uses citations only when necessary to reference specific claims, statistics, or quotes from sources
 
 Format the response as a structured report with:
 - A clear title that encompasses the overall research topic
 - An executive summary of the consolidated findings
 - Detailed sections that analyze different aspects
 - A conclusion that ties everything together
+- Judicious use of citations in superscript format [¹], [²], etc. ONLY when necessary
 
 Return the response in the following JSON format:
 {
@@ -68,10 +96,34 @@ Return the response in the following JSON format:
   "sections": [
     {
       "title": "Section Title",
-      "content": "Section content"
+      "content": "Section content with selective citations"
     }
-  ]
-}`
+  ],
+  "usedSources": [1, 2] // Array of source numbers that were actually cited in the report
+}
+
+CITATION GUIDELINES:
+1. Only use citations when truly necessary - specifically for:
+   - Direct quotes from sources
+   - Specific statistics, figures, or data points
+   - Non-obvious facts or claims that need verification
+   - Controversial statements
+   
+2. DO NOT use citations for:
+   - General knowledge
+   - Your own analysis or synthesis of information
+   - Widely accepted facts
+   - Every sentence or paragraph
+
+3. When needed, use superscript citation numbers in square brackets [¹], [²], etc. at the end of the relevant sentence
+   
+4. The citation numbers correspond directly to the source numbers provided in the list
+   
+5. Be judicious and selective with citations - a well-written report should flow naturally with citations only where they truly add credibility
+
+6. You DO NOT need to cite every source provided. Only cite the sources that contain information directly relevant to the report. Track which sources you actually cite and include their numbers in the "usedSources" array in the output JSON.
+
+7. It's completely fine if some sources aren't cited at all - this means they weren't needed for the specific analysis requested.`
 
     console.log('Generated prompt:', prompt)
 
@@ -104,6 +156,9 @@ Return the response in the following JSON format:
           ],
         }
       }
+
+      // Add sources to the response
+      parsedResponse.sources = allSources
 
       return NextResponse.json(parsedResponse)
     } catch (error) {
