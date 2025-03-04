@@ -1303,17 +1303,15 @@ export default function Home() {
                             prompt={state.reportPrompt}
                           />
                         </div>
-                        <p className='text-lg text-gray-700'>
-                          {state.report?.summary}
-                        </p>
-
-                        {/* Scrollable content area for sections and citations */}
-                        <div className='max-h-[600px] overflow-y-auto pr-2'>
+                        
+                        {/* Scrollable content area with proper height constraint */}
+                        <div className='max-h-[800px] overflow-y-auto pr-2' style={{ scrollbarWidth: 'thin' }}>
+                          <p className='text-lg text-gray-700 mb-6'>
+                            {state.report?.summary}
+                          </p>
+                          
                           {state.report?.sections?.map((section, index) => (
-                            <div
-                              key={index}
-                              className='space-y-2 border-t pt-4'
-                            >
+                            <div key={index} className='space-y-3 border-t pt-4 mb-6'>
                               <h3 className='text-xl font-semibold text-gray-700'>
                                 {section.title}
                               </h3>
@@ -1324,11 +1322,9 @@ export default function Home() {
                               </div>
                             </div>
                           ))}
-
+                          
                           {/* Citations Section */}
-                          {state.report && (
-                            <CitationsFooter report={state.report} />
-                          )}
+                          {state.report && <CitationsFooter report={state.report} />}
                         </div>
                       </CardContent>
                     </Card>

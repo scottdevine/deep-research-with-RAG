@@ -135,12 +135,16 @@ export function ReportContent({ id }: any) {
 
           <div className='prose max-w-none'>
             <h2>Summary</h2>
-            <p>{report.report.summary}</p>
 
-            {/* Scrollable content area for sections and citations */}
-            <div className='max-h-[600px] overflow-y-auto pr-2 mt-4'>
+            {/* Scrollable content area */}
+            <div
+              className='max-h-[700px] overflow-y-auto pr-2'
+              style={{ scrollbarWidth: 'thin' }}
+            >
+              <p className='mb-6'>{report.report.summary}</p>
+
               {report.report.sections.map((section, index) => (
-                <div key={index}>
+                <div key={index} className='mb-6'>
                   <h2>{section.title}</h2>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {section.content}
