@@ -79,11 +79,24 @@ export function ReportActions({
 
   const handleCopy = async () => {
     try {
-      const formattedContent = `${report.title}\n\n${
+      let formattedContent = `${report.title}\n\n${
         report.summary
       }\n\n${report.sections
         .map((section) => `${section.title}\n${section.content}`)
         .join('\n\n')}`
+        
+      // Filter sources if usedSources is available
+      const filteredSources = report.usedSources && report.usedSources.length > 0 && report.sources
+        ? report.sources.filter((_, index) => report.usedSources!.map(num => num - 1).includes(index))
+        : report.sources;
+        
+      // Add citations if filtered sources are available
+      if (filteredSources && filteredSources.length > 0) {
+        formattedContent += '\n\nReferences:\n' + 
+          filteredSources.map((source, index) => 
+            `${index + 1}. ${source.name} - ${source.url}`
+          ).join('\n')
+      }
 
       await navigator.clipboard.writeText(formattedContent)
       toast({

@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { CitationsFooter } from '@/components/citations-footer'
 
 export const ReportNode = memo(function ReportNode({
   id,
@@ -84,6 +85,9 @@ export const ReportNode = memo(function ReportNode({
                       </div>
                     </div>
                   ))}
+                  
+                  {/* Citations Section */}
+                  <CitationsFooter report={report} />
                 </div>
               </CollapsibleContent>
               <div className='flex justify-center mt-4 border-t pt-4'>

@@ -39,6 +39,7 @@ import { KnowledgeBaseSidebar } from '@/components/knowledge-base-sidebar'
 import { ReportActions } from '@/components/report-actions'
 import { ModelSelect, DEFAULT_MODEL } from '@/components/model-select'
 import { handleLocalFile, SUPPORTED_FILE_TYPES } from '@/lib/file-upload'
+import { CitationsFooter } from '@/components/citations-footer'
 
 const timeFilters = [
   { value: 'all', label: 'Any time' },
@@ -1380,6 +1381,9 @@ export default function Home() {
                             </div>
                           </div>
                         ))}
+                        
+                        {/* Citations Section */}
+                        {state.report && <CitationsFooter report={state.report} />}
                       </CardContent>
                     </Card>
                   )}

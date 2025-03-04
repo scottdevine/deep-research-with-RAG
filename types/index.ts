@@ -10,6 +10,7 @@ export type Report = {
     url: string
     name: string
   }[]
+  usedSources?: number[] // Array of source indices that were actually used/cited
 }
 export interface Article {
   url: string

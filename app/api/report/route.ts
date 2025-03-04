@@ -69,17 +69,17 @@ Your report should:
 2. Begin with a concise executive summary
 3. Be organized into relevant sections based on the analysis requested
 4. Use markdown formatting for emphasis, lists, and structure
-5. Integrate information from sources naturally without explicitly referencing them by number
+5. Use citations ONLY when necessary for specific claims, statistics, direct quotes, or important facts
 6. Maintain objectivity while addressing the specific aspects requested in the prompt
-7. Compare and contrast the information from each source, noting areas of consensus or points of contention. 
-8. Showcase key insights, important data, or innovative ideas.
+7. Compare and contrast the information from sources, noting areas of consensus or points of contention
+8. Showcase key insights, important data, or innovative ideas
 
-Here are the source articles to analyze:
+Here are the source articles to analyze (numbered for citation purposes):
 
 ${articles
   .map(
-    (article) => `
-Title: ${article.title}
+    (article, index) => `
+[${index + 1}] Title: ${article.title}
 URL: ${article.url}
 Content: ${article.content}
 ---
@@ -94,9 +94,10 @@ Format the report as a JSON object with the following structure:
   "sections": [
     {
       "title": "Section title",
-      "content": "Section content with markdown formatting"
+      "content": "Section content with markdown formatting and selective citations"
     }
-  ]
+  ],
+  "usedSources": [1, 2] // Array of source numbers that were actually cited in the report
 }
 
 Use markdown formatting in the content to improve readability:
@@ -107,7 +108,28 @@ Use markdown formatting in the content to improve readability:
 - Use > for quotations
 - Use --- for horizontal rules where appropriate
 
-Important: Do not use phrases like "Source 1" or "According to Source 2". Instead, integrate the information naturally into the narrative or reference sources by their titles when necessary.`
+CITATION GUIDELINES:
+1. Only use citations when truly necessary - specifically for:
+   - Direct quotes from sources
+   - Specific statistics, figures, or data points
+   - Non-obvious facts or claims that need verification
+   - Controversial statements
+   
+2. DO NOT use citations for:
+   - General knowledge
+   - Your own analysis or synthesis of information
+   - Widely accepted facts
+   - Every sentence or paragraph
+
+3. When needed, use superscript citation numbers in square brackets [¹], [²], etc. at the end of the relevant sentence
+   
+4. The citation numbers correspond directly to the source numbers provided in the list
+   
+5. Be judicious and selective with citations - a well-written report should flow naturally with citations only where they truly add credibility
+
+6. You DO NOT need to cite every source provided. Only cite the sources that contain information directly relevant to the report. Track which sources you actually cite and include their numbers in the "usedSources" array in the output JSON.
+
+7. It's completely fine if some sources aren't cited at all - this means they weren't needed for the specific analysis requested.`
     }
 
     const systemPrompt = generateSystemPrompt(selectedResults, prompt)

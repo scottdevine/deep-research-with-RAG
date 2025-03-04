@@ -12,6 +12,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ReportActions } from '@/components/report-actions'
+import { CitationsFooter } from '@/components/citations-footer'
 
 export function ReportContent({ id }: any) {
   const router = useRouter()
@@ -144,6 +145,9 @@ export function ReportContent({ id }: any) {
                 </ReactMarkdown>
               </div>
             ))}
+            
+            {/* Citations Section */}
+            <CitationsFooter report={report.report} />
           </div>
         </Card>
       </div>
