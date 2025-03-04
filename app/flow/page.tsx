@@ -52,7 +52,6 @@ import {
   createDebouncedViewportSave,
   createDebouncedNodesSave,
   createDebouncedEdgesSave,
-  restoreViewportFromProject,
 } from '@/lib/localStorage-utils'
 
 // Constants for localStorage keys - Now using project-based viewport storage
