@@ -30,7 +30,7 @@ export function CitationsFooter({ report }: CitationsFooterProps) {
     <div className='space-y-2 border-t pt-4 mt-6'>
       <h3 className='text-xl font-semibold text-gray-700'>References</h3>
       <ol className='list-decimal pl-5'>
-        {filteredSources.map((source, index) => (
+        {filteredSources.map((source) => (
           <li key={source.id} className='mb-1'>
             <a
               href={source.url}
