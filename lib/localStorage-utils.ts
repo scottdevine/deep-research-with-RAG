@@ -150,7 +150,6 @@ export function saveViewportToProject(
     updateProject({
       viewport,
     })
-    console.log(`Viewport saved for project: ${project.name}`)
   } catch (error) {
     console.error('Failed to save viewport to project:', error)
   }
@@ -167,7 +166,6 @@ export function restoreViewportFromProject(
 
   try {
     setViewport(project.viewport)
-    console.log(`Viewport restored for project: ${project.name}`)
     return true
   } catch (error) {
     console.error('Failed to restore project viewport:', error)

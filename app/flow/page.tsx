@@ -587,7 +587,6 @@ function useResearchFlow(
       handleApiError,
       handleFileUpload,
       handleGenerateReport,
-      setQuery,
     ]
   )
 
@@ -758,9 +757,9 @@ function Flow() {
   const reactFlowInstance = useReactFlow()
 
   // Create stable references for the save functions
-  const saveViewportRef = useRef<Function | null>(null)
-  const saveNodesRef = useRef<Function | null>(null)
-  const saveEdgesRef = useRef<Function | null>(null)
+  const saveViewportRef = useRef<(() => void) | null>(null)
+  const saveNodesRef = useRef<(() => void) | null>(null)
+  const saveEdgesRef = useRef<(() => void) | null>(null)
 
   // Update the function references when dependencies change
   useEffect(() => {
@@ -788,8 +787,6 @@ function Flow() {
       currentProject,
       updateCurrentProject
     )
-
-    console.log('Recreated debounced save functions')
 
     // Cleanup when project changes
     return () => {
@@ -897,7 +894,6 @@ function Flow() {
         viewportTimer = setTimeout(() => {
           if (reactFlowInstance && currentProject.viewport) {
             reactFlowInstance.setViewport(currentProject.viewport!)
-            console.log(`Viewport restored for project: ${currentProject.name}`)
           }
         }, 100)
       } catch (error) {

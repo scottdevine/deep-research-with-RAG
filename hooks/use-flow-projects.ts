@@ -86,7 +86,6 @@ export function useFlowProjects(): UseFlowProjectsReturn {
     if (currentProject) {
       // Get all report nodes
       const reportNodes = nodes.filter((node) => node.type === 'reportNode')
-      console.log('Simple save - Report nodes:', reportNodes)
 
       // Update the current project
       const updatedData = {
@@ -112,7 +111,6 @@ export function useFlowProjects(): UseFlowProjectsReturn {
 
       // Save directly to localStorage
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedProjects))
-      console.log('Directly saved to localStorage with simplified method')
     } else if (
       nodes.length > 0 ||
       edges.length > 0 ||
@@ -149,11 +147,6 @@ export function useFlowProjects(): UseFlowProjectsReturn {
     return nodes.map((node) => {
       // Create a deep copy to avoid mutating the original
       const nodeCopy = JSON.parse(JSON.stringify(node))
-
-      // Log what we're loading for report nodes
-      if (nodeCopy.type === 'reportNode') {
-        console.log('Loading reportNode:', nodeCopy.id, nodeCopy.data)
-      }
 
       // Set appropriate loading states for report and question nodes
       if (nodeCopy.type === 'reportNode') {
