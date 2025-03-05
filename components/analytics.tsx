@@ -11,15 +11,15 @@ export function Analytics() {
       src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_MEASUREMENT_ID}`}
       strategy='afterInteractive'
       onLoad={() => {
-        // @ts-ignore
+        // @ts-expect-error
         window.dataLayer = window.dataLayer || []
         function gtag() {
-          // @ts-ignore
+          // @ts-expect-error
           dataLayer.push(arguments)
         }
-        // @ts-ignore
+        // @ts-expect-error
         gtag('js', new Date())
-        // @ts-ignore
+        // @ts-expect-error
         gtag('config', GOOGLE_MEASUREMENT_ID)
       }}
     />
