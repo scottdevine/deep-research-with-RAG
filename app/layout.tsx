@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Zen_Dots } from 'next/font/google'
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from '@/components/ui/toaster'
+import { Analytics } from '@/components/analytics'
 
 import './globals.css'
 
@@ -30,10 +31,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang='en'>
+      <Analytics />
       <body className={`${geistSans.variable} ${zenDots.variable} antialiased`}>
         {children}
         <Toaster />
-      </body>      
+      </body>
     </html>
   )
 }
