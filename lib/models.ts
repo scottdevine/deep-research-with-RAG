@@ -77,7 +77,7 @@ export async function generateWithDeepSeek(
     ]
 
     const response = await deepseek.chat.completions.create({
-      model,
+      model: `deepseek-${model}`,
       messages: messages as any,
       max_tokens: 4000,
     })
