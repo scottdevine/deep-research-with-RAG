@@ -95,15 +95,23 @@ Research Topic: "${prompt}"
 Analyze these search results and score them based on:
 1. Relevance to the research topic
 2. Information quality and depth
-3. Source credibility
+3. Source credibility and authority
 4. Uniqueness of perspective
 
+Source Prioritization Guidelines:
+- HIGHLY PRIORITIZE peer-reviewed academic literature, scientific journals, and research publications
+- PRIORITIZE sources from established educational institutions, government agencies, and recognized expert organizations
+- DEPRIORITIZE opinion pieces, editorials, and sources that primarily express personal viewpoints rather than evidence-based information
+- DEPRIORITIZE sources with clear commercial bias or promotional content
+- CONSIDER the recency of information when relevant to the topic
+
 For each result, assign a score from 0 to 1, where:
-- 1.0: Highly relevant, authoritative, and comprehensive
-- 0.7-0.9: Very relevant with good information
-- 0.4-0.6: Moderately relevant or basic information
-- 0.1-0.3: Tangentially relevant
-- 0.0: Not relevant or unreliable
+- 1.0: Highly relevant, authoritative (especially peer-reviewed), and comprehensive
+- 0.8-0.9: Very relevant with high-quality information from reputable sources
+- 0.6-0.7: Relevant information from credible sources
+- 0.4-0.5: Moderately relevant or basic information from acceptable sources
+- 0.2-0.3: Tangentially relevant or from less authoritative sources
+- 0.0-0.1: Not relevant, unreliable, or primarily opinion-based content
 
 Here are the results to analyze:
 
@@ -125,13 +133,13 @@ Format your response as a JSON object with this structure:
     {
       "url": "result url",
       "score": 0.85,
-      "reasoning": "Brief explanation of the score"
+      "reasoning": "Brief explanation of the score, including assessment of source credibility and content type"
     }
   ],
-  "analysis": "Brief overall analysis of the result set"
+  "analysis": "Brief overall analysis of the result set, highlighting the most valuable academic and authoritative sources"
 }
 
-Focus on finding results that provide unique, high-quality information relevant to the research topic.`
+Focus on finding results that provide unique, high-quality information from peer-reviewed and highly reputable sources relevant to the research topic. Explicitly mention in your reasoning when a source is peer-reviewed or when it appears to be primarily opinion-based.`
 
     try {
       const response = await generateWithModel(systemPrompt, platformModel)

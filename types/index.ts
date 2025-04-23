@@ -32,6 +32,7 @@ export type SearchResult = {
   snippet: string
   isCustomUrl?: boolean
   score?: number
+  reasoning?: string
   content?: string
 }
 
@@ -80,6 +81,7 @@ export interface Platforms {
 export type Status = {
   loading: boolean
   generatingReport: boolean
+  prioritizingResults: boolean
   agentStep: 'idle' | 'processing' | 'searching' | 'analyzing' | 'generating'
   fetchStatus: {
     total: number
@@ -111,6 +113,8 @@ export type State = {
   totalPages: number
   totalResults: number
   allResults: SearchResult[][] // Array of result pages
+  // Prioritization flag
+  resultsPrioritized: boolean
 }
 
 // Flow Component Types

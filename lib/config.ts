@@ -10,8 +10,8 @@ export const CONFIG = {
 
   // Search settings
   search: {
-    resultsPerPage: 10,
-    maxSelectableResults: 20,
+    resultsPerPage: 10, // Number of results to show per page
+    maxSelectableResults: 20, // Maximum number of sources that can be selected for a report
     provider: 'google' as 'google' | 'bing' | 'exa', // Default search provider
     safeSearch: {
       google: 'active' as 'active' | 'off',

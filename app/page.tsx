@@ -16,6 +16,7 @@ import {
   Brain,
   Code,
   Loader2,
+  Sparkles,
 } from 'lucide-react'
 import {
   Select,
@@ -25,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import type { SearchResult, RankingResult, Status, State } from '@/types'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -96,6 +98,7 @@ export default function Home() {
     status: {
       loading: false,
       generatingReport: false,
+      prioritizingResults: false,
       agentStep: 'idle',
       fetchStatus: { total: 0, successful: 0, fallback: 0, sourceStatuses: {} },
       agentInsights: [],
@@ -106,6 +109,8 @@ export default function Home() {
     totalPages: 0,
     totalResults: 0,
     allResults: [],
+    // Initialize prioritization flag
+    resultsPrioritized: false,
   })
 
   const { toast } = useToast()
@@ -357,6 +362,11 @@ export default function Home() {
       updateStatus({ loading: true })
       updateState({ error: null, reportPrompt: '' })
 
+      // If this is a new search, reset the prioritization flag
+      if (e.type === 'submit') {
+        updateState({ resultsPrioritized: false })
+      }
+
       try {
         // If this is a new search (not pagination), reset pagination state
         const isNewSearch = e.type === 'submit'
@@ -384,9 +394,9 @@ export default function Home() {
         })
 
         const newResults = (response.webPages?.value || []).map(
-          (result: SearchResult) => ({
+          (result: SearchResult, index: number) => ({
             ...result,
-            id: `search-${Date.now()}-${result.id || result.url}`,
+            id: `search-page${pageToFetch}-${index}-${result.id || encodeURIComponent(result.url)}`,
           })
         )
 
@@ -567,11 +577,10 @@ export default function Home() {
         }
 
         // Process results
-        const timestamp = Date.now()
         const allResults = searchResults.map(
           (result: SearchResult, idx: number) => ({
             ...result,
-            id: `search-${timestamp}-${idx}-${result.url}`,
+            id: `search-agent-${idx}-${result.id || encodeURIComponent(result.url)}`,
             score: 0,
           })
         )
@@ -779,6 +788,258 @@ export default function Home() {
     ]
   )
 
+  // Function to fetch multiple pages of search results (up to 100 results)
+  const fetchMultiplePages = useCallback(async (maxResults = 100) => {
+    if (!state.query.trim() || state.status.loading) return []
+
+    updateStatus({ loading: true })
+    updateState({ error: null })
+
+    try {
+      console.log('Fetching multiple pages, up to', maxResults, 'results')
+      // Calculate how many pages we need to fetch to get maxResults
+      const resultsPerPage = CONFIG.search.resultsPerPage
+      const pagesToFetch = Math.min(10, Math.ceil(maxResults / resultsPerPage))
+
+      let allResults: SearchResult[] = []
+      let totalPagesAvailable = 1
+
+      // Fetch first page to get total pages information
+      const firstPageResponse = await retryWithBackoff(async () => {
+        const res = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: state.query,
+            timeFilter: state.timeFilter,
+            page: 1,
+          }),
+        })
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ error: 'Search failed' }))
+          throw new Error(errorData.error || `Search failed: ${res.status}`)
+        }
+
+        return res.json()
+      })
+
+      // Process first page results
+      const firstPageResults = (firstPageResponse.webPages?.value || []).map(
+        (result: SearchResult, index: number) => ({
+          ...result,
+          id: `search-page1-${index}-${result.id || encodeURIComponent(result.url)}`,
+        })
+      )
+
+      allResults = [...firstPageResults]
+
+      // Get pagination info
+      const { totalPages } = firstPageResponse.pagination || { totalPages: 1 }
+      totalPagesAvailable = totalPages
+      const actualPagesToFetch = Math.min(pagesToFetch, totalPages)
+
+      console.log(`Found ${totalPages} total pages, fetching ${actualPagesToFetch} pages`)
+
+      // Fetch remaining pages in parallel
+      if (actualPagesToFetch > 1) {
+        const pagePromises = []
+
+        for (let page = 2; page <= actualPagesToFetch; page++) {
+          pagePromises.push(
+            retryWithBackoff(async () => {
+              const res = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  query: state.query,
+                  timeFilter: state.timeFilter,
+                  page,
+                }),
+              })
+
+              if (!res.ok) {
+                throw new Error(`Failed to fetch page ${page}`)
+              }
+
+              return res.json()
+            })
+          )
+        }
+
+        // Wait for all pages to be fetched
+        const pageResponses = await Promise.all(pagePromises)
+
+        // Process and add results from each page
+        for (let pageIndex = 0; pageIndex < pageResponses.length; pageIndex++) {
+          const pageResponse = pageResponses[pageIndex];
+          const pageNumber = pageIndex + 2; // Pages start from 2 since we already processed page 1
+
+          const pageResults = (pageResponse.webPages?.value || []).map(
+            (result: SearchResult, resultIndex: number) => ({
+              ...result,
+              id: `search-page${pageNumber}-${resultIndex}-${result.id || encodeURIComponent(result.url)}`,
+            })
+          )
+
+          allResults = [...allResults, ...pageResults]
+        }
+      }
+
+      const finalResults = allResults.slice(0, maxResults)
+      console.log(`Fetched ${finalResults.length} total results across ${actualPagesToFetch} pages`)
+
+      return {
+        results: finalResults,
+        totalPages: totalPagesAvailable,
+        totalResults: Math.min(totalPagesAvailable * resultsPerPage, maxResults)
+      }
+    } catch (error) {
+      console.error('Error fetching multiple pages:', error)
+      handleError(error, 'Search Error')
+      return {
+        results: [],
+        totalPages: 0,
+        totalResults: 0
+      }
+    } finally {
+      updateStatus({ loading: false })
+    }
+  }, [state.query, state.timeFilter, updateStatus, updateState, handleError])
+
+  // Function to prioritize search results using LLM
+  const handlePrioritizeResults = useCallback(async () => {
+    if (state.results.length === 0 || state.status.prioritizingResults) return
+
+    updateStatus({ prioritizingResults: true })
+
+    try {
+      // Fetch up to 100 results for prioritization
+      const fetchedData = await fetchMultiplePages(100)
+
+      // If we couldn't fetch additional results, use current results
+      const resultsToAnalyze = fetchedData.results?.length > 0 ?
+        fetchedData.results :
+        state.results.filter(r => !r.isCustomUrl)
+
+      console.log(`Prioritizing ${resultsToAnalyze.length} search results`)
+
+      toast({
+        title: 'Prioritizing Results',
+        description: `Analyzing ${resultsToAnalyze.length} search results...`,
+        duration: 3000,
+      })
+
+      const response = await fetch('/api/analyze-results', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: state.query,
+          results: resultsToAnalyze.map((r) => ({
+            title: r.name,
+            snippet: r.snippet,
+            url: r.url,
+          })),
+          platformModel: state.selectedModel,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to prioritize results: ${response.status}`)
+      }
+
+      const { rankings, analysis } = await response.json()
+      console.log(`Received ${rankings.length} ranked results from LLM`)
+
+      // Update results with scores and reasoning
+      const updatedResults = resultsToAnalyze.map((result) => {
+        const ranking = rankings.find((r: RankingResult) => r.url === result.url)
+        if (ranking) {
+          return {
+            ...result,
+            score: ranking.score,
+            reasoning: ranking.reasoning,
+          }
+        }
+        // Assign a default low score to results that didn't get scored by the LLM
+        return {
+          ...result,
+          score: 0.1, // Default low score
+          reasoning: 'This result was not explicitly scored by the AI. It may be less relevant to your query.'
+        }
+      })
+
+      // Log how many results got scores from the LLM vs. default scores
+      const scoredByLLM = updatedResults.filter(r => rankings.some(ranking => ranking.url === r.url)).length
+      const defaultScored = updatedResults.length - scoredByLLM
+      console.log(`${scoredByLLM} results scored by LLM, ${defaultScored} assigned default scores`)
+
+      // Sort results by score (highest first)
+      const sortedResults = [...updatedResults].sort((a, b) => {
+        // Custom URLs always at the top
+        if (a.isCustomUrl && !b.isCustomUrl) return -1
+        if (!a.isCustomUrl && b.isCustomUrl) return 1
+        // Then sort by score (highest first)
+        return (b.score || 0) - (a.score || 0)
+      })
+
+      // Keep any custom URLs from the current state
+      const customUrls = state.results.filter(r => r.isCustomUrl)
+
+      // Combine custom URLs with sorted results
+      const finalResults = [...customUrls, ...sortedResults.filter(r => !r.isCustomUrl)]
+
+      // Calculate how many pages we need
+      const resultsPerPage = CONFIG.search.resultsPerPage
+      const totalPrioritizedPages = Math.ceil(finalResults.length / resultsPerPage)
+
+      console.log(`Creating ${totalPrioritizedPages} pages of prioritized results`)
+
+      // Create a new allResults array with prioritized results properly distributed
+      const newAllResults: SearchResult[][] = []
+
+      // Distribute results across pages
+      for (let i = 0; i < finalResults.length; i += resultsPerPage) {
+        const pageIndex = Math.floor(i / resultsPerPage)
+        newAllResults[pageIndex] = finalResults.slice(i, i + resultsPerPage)
+      }
+
+      // Log the distribution of results
+      newAllResults.forEach((page, index) => {
+        console.log(`Page ${index + 1}: ${page.length} results, scores: ${page.map(r => r.score || 0).join(', ')}`)
+      })
+
+      // Update the state with all prioritized results
+      setState((prev) => {
+        return {
+          ...prev,
+          results: newAllResults[0] || [], // First page results
+          allResults: newAllResults,
+          currentPage: 1,
+          totalPages: totalPrioritizedPages,
+          totalResults: finalResults.length,
+          resultsPrioritized: true, // Set the flag to indicate results have been prioritized
+        }
+      })
+
+      // Show a toast notification with the analysis
+      toast({
+        title: 'Results Prioritized',
+        description: `${sortedResults.length} results prioritized across ${totalPrioritizedPages} pages. ${analysis}`,
+        duration: 5000,
+      })
+    } catch (error) {
+      console.error('Error prioritizing results:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to prioritize results',
+        variant: 'destructive',
+      })
+    } finally {
+      updateStatus({ prioritizingResults: false })
+    }
+  }, [state.results, state.query, state.timeFilter, state.selectedModel, state.allResults, fetchMultiplePages, updateStatus, toast])
+
   // Define a function to handle page changes
   const handlePageChangeImpl = (newPage: number) => {
     // Check if we already have this page in our allResults array
@@ -795,6 +1056,18 @@ export default function Home() {
         ],
       }))
     } else {
+      // If results are prioritized, we shouldn't fetch new results
+      // as all prioritized results should already be in allResults
+      if (state.resultsPrioritized) {
+        console.warn('Attempted to navigate to a page beyond prioritized results')
+        toast({
+          title: 'Navigation Error',
+          description: 'Cannot navigate beyond prioritized results',
+          variant: 'destructive',
+        })
+        return
+      }
+
       // We need to fetch this page
       setState((prev) => ({ ...prev, currentPage: newPage }))
       // Create a synthetic event to trigger the search
@@ -806,7 +1079,7 @@ export default function Home() {
   // Memoized pagination handler
   const handlePageChange = useCallback(
     (newPage: number) => handlePageChangeImpl(newPage),
-    [state.allResults, state.results, state.selectedResults, state.currentPage]
+    [state.allResults, state.results, state.selectedResults, state.currentPage, state.resultsPrioritized, toast]
   )
 
   // Memoized utility functions
@@ -1252,6 +1525,45 @@ export default function Home() {
                 </TabsList>
 
                 <TabsContent value='search' className='space-y-4'>
+                  {!state.isAgentMode && state.results.length > 0 && (
+                    <div className='flex justify-between items-center mb-4'>
+                      <div className='flex items-center gap-2'>
+                        <h2 className='text-lg font-medium'>
+                          {state.totalResults > 0 ? state.totalResults : state.results.length} results
+                        </h2>
+                        {state.results.some(r => r.score !== undefined) && (
+                          <Badge variant='default' className='text-xs'>
+                            Prioritized
+                          </Badge>
+                        )}
+                        {state.totalPages > 1 && (
+                          <Badge variant='outline' className='text-xs'>
+                            Page {state.currentPage} of {state.totalPages}
+                          </Badge>
+                        )}
+                      </div>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={handlePrioritizeResults}
+                        disabled={state.status.prioritizingResults}
+                        className='flex items-center gap-1'
+                      >
+                        {state.status.prioritizingResults ? (
+                          <Loader2 className='h-4 w-4 animate-spin' />
+                        ) : (
+                          <Sparkles className='h-4 w-4' />
+                        )}
+                        <span>
+                          {state.status.prioritizingResults
+                            ? 'Prioritizing...'
+                            : state.resultsPrioritized
+                              ? 'Re-prioritize Results'
+                              : 'Prioritize All Results (up to 100)'}
+                        </span>
+                      </Button>
+                    </div>
+                  )}
                   {!state.isAgentMode &&
                     state.results
                       .filter((r) => r.isCustomUrl)
@@ -1327,16 +1639,27 @@ export default function Home() {
                             />
                           </div>
                           <div className='flex-1 min-w-0'>
-                            <h2 className='text-xl font-semibold truncate text-blue-600 hover:underline'>
-                              <a
-                                href={result.url}
-                                target='_blank'
-                                rel='noopener noreferrer'
-                                dangerouslySetInnerHTML={{
-                                  __html: result.name,
-                                }}
-                              />
-                            </h2>
+                            <div className='flex justify-between items-start'>
+                              <h2 className='text-xl font-semibold truncate text-blue-600 hover:underline'>
+                                <a
+                                  href={result.url}
+                                  target='_blank'
+                                  rel='noopener noreferrer'
+                                  dangerouslySetInnerHTML={{
+                                    __html: result.name,
+                                  }}
+                                />
+                              </h2>
+                              {result.score !== undefined && (
+                                <Badge
+                                  variant={result.score > 0.7 ? 'default' : result.score > 0.4 ? 'secondary' : 'outline'}
+                                  className={`ml-2 ${result.score <= 0.1 ? 'opacity-50' : ''}`}
+                                >
+                                  {(result.score * 100).toFixed(0)}%
+                                  {result.score <= 0.1 && ' (default)'}
+                                </Badge>
+                              )}
+                            </div>
                             <p className='text-green-700 text-sm truncate'>
                               {result.url}
                             </p>
@@ -1346,6 +1669,11 @@ export default function Home() {
                                 __html: result.snippet,
                               }}
                             />
+                            {result.reasoning && (
+                              <div className='mt-2 text-sm text-gray-500 border-t pt-2'>
+                                <p className='italic'>{result.reasoning}</p>
+                              </div>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
