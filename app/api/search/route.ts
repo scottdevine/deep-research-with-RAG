@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { searchRatelimit } from '@/lib/redis'
 import { CONFIG } from '@/lib/config'
+import { searchPubMed } from '@/lib/pubmed'
 
 const BING_ENDPOINT = 'https://api.bing.microsoft.com/v7.0/search'
 const GOOGLE_ENDPOINT = 'https://customsearch.googleapis.com/customsearch/v1'
@@ -73,13 +74,16 @@ function getExaRecency(timeFilter: TimeFilter): string {
 
 export async function POST(request: Request) {
   try {
+    console.log('=== SEARCH API CALLED ===');
     const body = await request.json()
+    console.log('Request body:', body);
     const {
       query,
       timeFilter = 'all',
       provider = CONFIG.search.provider,
       isTestQuery = false,
       page = 1, // Add pagination support
+      includePubMed = false, // Option to include PubMed results
     } = body
 
     if (!query) {
@@ -87,6 +91,64 @@ export async function POST(request: Request) {
         { error: 'Query parameter is required' },
         { status: 400 }
       )
+    }
+
+    // Handle PubMed search if requested
+    let pubmedResults = [];
+
+    // Always try a direct PubMed test search for debugging
+    try {
+      console.log('Performing direct PubMed test search for "cancer"');
+      const testResults = await searchPubMed('cancer', 3);
+      console.log(`Direct PubMed test returned ${testResults.length} results`);
+      if (testResults.length > 0) {
+        console.log('First test result:', JSON.stringify(testResults[0], null, 2));
+      }
+    } catch (error) {
+      console.error('Direct PubMed test search failed:', error);
+    }
+
+    if (includePubMed && !isTestQuery) {
+      try {
+        console.log(`Requesting PubMed results for query: "${query}" (includePubMed=${includePubMed})`);
+
+        // Extract key terms for PubMed search
+        const keyTerms = extractKeyTermsForPubMed(query);
+        console.log(`Extracted key terms for PubMed: "${keyTerms}"`);
+
+        // Get PubMed results with the simplified query
+        pubmedResults = await searchPubMed(keyTerms, CONFIG.search.resultsPerPage);
+        console.log(`Found ${pubmedResults.length} PubMed results for query: "${query}"`);
+
+        if (pubmedResults.length > 0) {
+          console.log('First PubMed result:', JSON.stringify(pubmedResults[0], null, 2));
+        } else {
+          console.log('No PubMed results found');
+        }
+
+        // If only PubMed results are requested, return them directly
+        if (provider === 'pubmed') {
+          const totalResults = pubmedResults.length;
+          const totalPages = Math.ceil(totalResults / CONFIG.search.resultsPerPage);
+          console.log(`Returning ${pubmedResults.length} PubMed-only results`);
+
+          return NextResponse.json({
+            webPages: {
+              value: pubmedResults,
+            },
+            pagination: {
+              currentPage: page,
+              totalPages,
+              totalResults,
+            }
+          });
+        }
+      } catch (error) {
+        console.error('PubMed search error:', error);
+        // Continue with regular search even if PubMed search fails
+      }
+    } else {
+      console.log(`PubMed search skipped. includePubMed=${includePubMed}, isTestQuery=${isTestQuery}`);
     }
 
     // Return dummy results for test queries
@@ -289,26 +351,70 @@ export async function POST(request: Request) {
       const data = await googleResponse.json()
 
       // Calculate total results and pages
-      const totalResults = data.searchInformation?.totalResults ? parseInt(data.searchInformation.totalResults) : 0
-      const totalPages = Math.ceil(totalResults / CONFIG.search.resultsPerPage)
+      let totalResults = data.searchInformation?.totalResults ? parseInt(data.searchInformation.totalResults) : 0
+      let totalPages = Math.ceil(totalResults / CONFIG.search.resultsPerPage)
 
       // Transform Google search results to match our format
+      let googleResults = data.items?.map((item: any) => ({
+        id: item.cacheId || item.link,
+        url: item.link,
+        name: item.title,
+        snippet: item.snippet,
+        source: 'google',
+      })) || [];
+
+      // Combine Google and PubMed results if needed
+      let combinedResults = googleResults;
+      let allCombinedResults = googleResults;
+
+      if (includePubMed && pubmedResults.length > 0) {
+        console.log(`Merging ${googleResults.length} Google results with ${pubmedResults.length} PubMed results`);
+
+        // For the first page, ensure we have a mix of both sources
+        if (page === 1) {
+          // Create an interleaved first page with both Google and PubMed results
+          combinedResults = [];
+          const maxPerSource = Math.ceil(CONFIG.search.resultsPerPage / 2);
+
+          // Add some Google results
+          combinedResults.push(...googleResults.slice(0, maxPerSource));
+
+          // Add some PubMed results
+          combinedResults.push(...pubmedResults.slice(0, CONFIG.search.resultsPerPage - combinedResults.length));
+
+          // Store all results for pagination
+          allCombinedResults = [...googleResults, ...pubmedResults];
+        } else {
+          // For subsequent pages, just combine all results and paginate
+          allCombinedResults = [...googleResults, ...pubmedResults];
+          combinedResults = allCombinedResults.slice((page - 1) * CONFIG.search.resultsPerPage, page * CONFIG.search.resultsPerPage);
+        }
+
+        // Count how many of each type made it into the current page results
+        const pubmedCount = combinedResults.filter(r => r.isPubMed).length;
+        const googleCount = combinedResults.length - pubmedCount;
+        console.log(`Page ${page} results: ${combinedResults.length} total (${pubmedCount} PubMed, ${googleCount} Google)`);
+        console.log(`Total combined results: ${allCombinedResults.length} (${pubmedResults.length} PubMed, ${googleResults.length} Google)`);
+
+        // Set total results to the total number of combined results
+        totalResults = allCombinedResults.length;
+        totalPages = Math.ceil(totalResults / CONFIG.search.resultsPerPage);
+      } else if (includePubMed) {
+        console.log('No PubMed results to merge with Google results');
+      }
+
       const transformedResults = {
         webPages: {
-          value:
-            data.items?.map((item: any) => ({
-              id: item.cacheId || item.link,
-              url: item.link,
-              name: item.title,
-              snippet: item.snippet,
-            })) || [],
+          value: combinedResults,
         },
         // Add pagination information
         pagination: {
           currentPage: page,
           totalPages,
           totalResults,
-        }
+        },
+        // Add flag to indicate PubMed results are included
+        hasPubMedResults: includePubMed && pubmedResults.length > 0,
       }
 
       return NextResponse.json(transformedResults)
@@ -419,4 +525,82 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
+}
+
+// Helper function to extract key terms from a query for PubMed search and convert to MeSH terms
+function extractKeyTermsForPubMed(query: string): string {
+  // For simple medical queries, convert directly to MeSH terms
+  const lowerQuery = query.toLowerCase();
+
+  // Check for specific medical topics and use appropriate MeSH terms
+  if (lowerQuery.includes('cancer')) {
+    if (lowerQuery.includes('breast cancer')) {
+      return '"Breast Neoplasms"[MeSH]';
+    } else if (lowerQuery.includes('lung cancer')) {
+      return '"Lung Neoplasms"[MeSH]';
+    } else if (lowerQuery.includes('prostate cancer')) {
+      return '"Prostatic Neoplasms"[MeSH]';
+    } else if (lowerQuery.includes('research')) {
+      return '"Neoplasms"[MeSH] AND "Research"[MeSH]';
+    } else {
+      return '"Neoplasms"[MeSH]';
+    }
+  }
+
+  if (lowerQuery.includes('diabetes')) {
+    if (lowerQuery.includes('type 2') || lowerQuery.includes('type ii')) {
+      return '"Diabetes Mellitus, Type 2"[MeSH]';
+    } else if (lowerQuery.includes('type 1') || lowerQuery.includes('type i')) {
+      return '"Diabetes Mellitus, Type 1"[MeSH]';
+    } else {
+      return '"Diabetes Mellitus"[MeSH]';
+    }
+  }
+
+  if (lowerQuery.includes('covid') || lowerQuery.includes('coronavirus')) {
+    return '"COVID-19"[MeSH]';
+  }
+
+  // Special case for 340b program
+  if (lowerQuery.includes('340b')) {
+    return '"Drug Costs"[MeSH] AND "Pharmaceutical Services"[MeSH] AND 340b';
+  }
+
+  // For other queries, extract key terms and try to map to MeSH
+  // Remove common phrases that make the query too specific
+  let simplified = query.replace(/I am interested in|I want to know about|Please tell me about|Can you find information on|latest research on/gi, '');
+
+  // Remove filler words but keep important medical terms
+  const fillerWords = /\b(the|and|or|of|in|on|to|for|a|an|is|are|that|this|these|those|with|by|as|at|from|about)\b/gi;
+  simplified = simplified.replace(fillerWords, ' ');
+
+  // Extract potential medical/scientific terms
+  const words = simplified.split(/\s+/).filter(word => word.length > 2);
+
+  // Map common terms to MeSH terms
+  const meshMappings: Record<string, string> = {
+    'drug': '"Pharmaceutical Preparations"[MeSH]',
+    'drugs': '"Pharmaceutical Preparations"[MeSH]',
+    'medicine': '"Medicine"[MeSH]',
+    'treatment': '"Therapeutics"[MeSH]',
+    'therapy': '"Therapeutics"[MeSH]',
+    'disease': '"Disease"[MeSH]',
+    'health': '"Health"[MeSH]',
+    'clinical': '"Clinical Study"[Publication Type]',
+    'trial': '"Clinical Trial"[Publication Type]',
+    'research': '"Research"[MeSH]',
+    'pharmaceutical': '"Pharmaceutical Preparations"[MeSH]',
+    'pharma': '"Pharmaceutical Industry"[MeSH]',
+    'discount': '"Economics, Pharmaceutical"[MeSH]',
+    'program': '"Programs"[MeSH]',
+  };
+
+  // Convert words to MeSH terms when possible
+  const meshTerms = words.map(word => {
+    const lowerWord = word.toLowerCase();
+    return meshMappings[lowerWord] || word;
+  });
+
+  // Join terms with AND operator for better PubMed search
+  return meshTerms.join(' AND ') || query.trim();
 }

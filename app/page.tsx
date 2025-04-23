@@ -95,6 +95,7 @@ export default function Home() {
     isAgentMode: false,
     sidebarOpen: false,
     activeTab: 'search',
+    includePubMed: true, // Default to including PubMed results
     status: {
       loading: false,
       generatingReport: false,
@@ -372,15 +373,22 @@ export default function Home() {
         const isNewSearch = e.type === 'submit'
         const pageToFetch = isNewSearch ? 1 : state.currentPage
 
+        console.log('Client-side search with includePubMed:', state.includePubMed)
+
+        const requestBody = {
+          query: state.query,
+          timeFilter: state.timeFilter,
+          page: pageToFetch,
+          includePubMed: state.includePubMed,
+        }
+
+        console.log('Search request body:', requestBody)
+
         const response = await retryWithBackoff(async () => {
           const res = await fetch('/api/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              query: state.query,
-              timeFilter: state.timeFilter,
-              page: pageToFetch,
-            }),
+            body: JSON.stringify(requestBody),
           })
 
           if (!res.ok) {
@@ -545,6 +553,7 @@ export default function Home() {
               query,
               timeFilter: state.timeFilter,
               isTestQuery: query.toLowerCase() === 'test',
+              includePubMed: state.includePubMed,
             }),
           })
           if (!response.ok) {
@@ -813,6 +822,7 @@ export default function Home() {
             query: state.query,
             timeFilter: state.timeFilter,
             page: 1,
+            includePubMed: state.includePubMed,
           }),
         })
 
@@ -855,6 +865,7 @@ export default function Home() {
                   query: state.query,
                   timeFilter: state.timeFilter,
                   page,
+                  includePubMed: state.includePubMed,
                 }),
               })
 
@@ -1325,6 +1336,22 @@ export default function Home() {
                         />
                       </div>
 
+                      <div className='flex items-center space-x-2 mt-2 sm:mt-0'>
+                        <Checkbox
+                          id='include-pubmed'
+                          checked={state.includePubMed}
+                          onCheckedChange={(checked) =>
+                            updateState({ includePubMed: checked as boolean })
+                          }
+                        />
+                        <label
+                          htmlFor='include-pubmed'
+                          className='text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70'
+                        >
+                          Include PubMed Results
+                        </label>
+                      </div>
+
                       <Button
                         type='submit'
                         disabled={state.status.loading}
@@ -1650,15 +1677,22 @@ export default function Home() {
                                   }}
                                 />
                               </h2>
-                              {result.score !== undefined && (
-                                <Badge
-                                  variant={result.score > 0.7 ? 'default' : result.score > 0.4 ? 'secondary' : 'outline'}
-                                  className={`ml-2 ${result.score <= 0.1 ? 'opacity-50' : ''}`}
-                                >
-                                  {(result.score * 100).toFixed(0)}%
-                                  {result.score <= 0.1 && ' (default)'}
-                                </Badge>
-                              )}
+                              <div className='flex gap-1'>
+                                {result.isPubMed && (
+                                  <Badge variant='secondary' className='bg-blue-100 text-blue-800 hover:bg-blue-200'>
+                                    PubMed
+                                  </Badge>
+                                )}
+                                {result.score !== undefined && (
+                                  <Badge
+                                    variant={result.score > 0.7 ? 'default' : result.score > 0.4 ? 'secondary' : 'outline'}
+                                    className={`${result.score <= 0.1 ? 'opacity-50' : ''}`}
+                                  >
+                                    {(result.score * 100).toFixed(0)}%
+                                    {result.score <= 0.1 && ' (default)'}
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                             <p className='text-green-700 text-sm truncate'>
                               {result.url}

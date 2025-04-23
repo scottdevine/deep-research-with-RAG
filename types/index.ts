@@ -31,9 +31,16 @@ export type SearchResult = {
   name: string
   snippet: string
   isCustomUrl?: boolean
+  isPubMed?: boolean
+  source?: 'google' | 'pubmed' | 'custom'
   score?: number
   reasoning?: string
   content?: string
+  // PubMed specific fields
+  authors?: string[]
+  journal?: string
+  pubDate?: string
+  pmid?: string
 }
 
 export type RankingResult = {
@@ -107,6 +114,7 @@ export type State = {
   isAgentMode: boolean
   sidebarOpen: boolean
   activeTab: string
+  includePubMed: boolean // Option to include PubMed results
   status: Status
   // Pagination related fields
   currentPage: number
