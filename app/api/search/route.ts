@@ -365,30 +365,30 @@ export async function POST(request: Request) {
 
       // Combine Google and PubMed results if needed
       let combinedResults = googleResults;
-      let allCombinedResults = googleResults;
 
       if (includePubMed && pubmedResults.length > 0) {
         console.log(`Merging ${googleResults.length} Google results with ${pubmedResults.length} PubMed results`);
 
-        // For the first page, ensure we have a mix of both sources
-        if (page === 1) {
-          // Create an interleaved first page with both Google and PubMed results
-          combinedResults = [];
-          const maxPerSource = Math.ceil(CONFIG.search.resultsPerPage / 2);
+        // Combine all results from both sources
+        const allCombinedResults = [...googleResults, ...pubmedResults];
 
-          // Add some Google results
-          combinedResults.push(...googleResults.slice(0, maxPerSource));
+        // Calculate the start and end indices for the current page
+        const startIndex = (page - 1) * CONFIG.search.resultsPerPage;
+        const endIndex = page * CONFIG.search.resultsPerPage;
 
-          // Add some PubMed results
-          combinedResults.push(...pubmedResults.slice(0, CONFIG.search.resultsPerPage - combinedResults.length));
+        // Get the results for the current page
+        combinedResults = allCombinedResults.slice(startIndex, endIndex);
 
-          // Store all results for pagination
-          allCombinedResults = [...googleResults, ...pubmedResults];
-        } else {
-          // For subsequent pages, just combine all results and paginate
-          allCombinedResults = [...googleResults, ...pubmedResults];
-          combinedResults = allCombinedResults.slice((page - 1) * CONFIG.search.resultsPerPage, page * CONFIG.search.resultsPerPage);
-        }
+        // Count how many of each type made it into the current page results
+        const pubmedCount = combinedResults.filter(r => r.isPubMed).length;
+        const googleCount = combinedResults.length - pubmedCount;
+
+        console.log(`Page ${page} results: ${combinedResults.length} total (${pubmedCount} PubMed, ${googleCount} Google)`);
+        console.log(`Total combined results: ${allCombinedResults.length} (${pubmedResults.length} PubMed, ${googleResults.length} Google)`);
+
+        // Set total results to the total number of combined results
+        totalResults = allCombinedResults.length;
+        totalPages = Math.ceil(totalResults / CONFIG.search.resultsPerPage);
 
         // Count how many of each type made it into the current page results
         const pubmedCount = combinedResults.filter(r => r.isPubMed).length;
