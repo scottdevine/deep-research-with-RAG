@@ -4,7 +4,8 @@ import { generateWithModel } from '@/lib/models'
 import { reportContentRatelimit } from '@/lib/redis'
 export async function POST(request: Request) {
   try {
-    const { report, platformModel } = await request.json()
+    // Update the default model if none is specified
+    const { report, platformModel = 'openai__gpt-4.1-2025-04-14' } = await request.json()
     const platform = platformModel.split('__')[0]
 
     if (CONFIG.rateLimits.enabled && platform !== 'ollama') {

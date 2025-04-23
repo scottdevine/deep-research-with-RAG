@@ -7,7 +7,8 @@ import { type ModelVariant } from '@/types'
 
 export async function POST(request: Request) {
   try {
-    const { prompt, platformModel = 'google__gemini-flash' } =
+    // Update the default model
+    const { prompt, platformModel = 'openai__gpt-4.1-2025-04-14' } =
       (await request.json()) as {
         prompt: string
         platformModel: ModelVariant

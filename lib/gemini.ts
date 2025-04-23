@@ -1,3 +1,4 @@
+
 import {
   GoogleGenerativeAI,
   HarmBlockThreshold,
@@ -37,26 +38,28 @@ const safetySettings = [
   },
 ]
 
-export const geminiFlashLiteModel = genAI.getGenerativeModel({
-  model: 'gemini-2.0-flash-lite-preview-02-05',
+// Gemini 2.0 Models
+export const gemini20FlashModel = genAI.getGenerativeModel({
+  model: 'gemini-2.0-flash-001',
   safetySettings,
   generationConfig: generationJsonConfig,
 })
 
-export const geminiFlashModel = genAI.getGenerativeModel({
-  model: 'gemini-2.0-flash',
-  safetySettings,
-  generationConfig: generationJsonConfig,
-})
-
-export const geminiFlashThinkingModel = genAI.getGenerativeModel({
-  model: 'gemini-2.0-flash-thinking-exp-01-21',
-  safetySettings,
-  generationConfig: generationPlainTextConfig,
-})
-
-export const geminiModel = genAI.getGenerativeModel({
+export const gemini20ProModel = genAI.getGenerativeModel({
   model: 'gemini-2.0-pro-exp-02-05',
+  safetySettings,
+  generationConfig: generationJsonConfig,
+})
+
+// Gemini 2.5 Models
+export const gemini25FlashModel = genAI.getGenerativeModel({
+  model: 'gemini-2.5-flash-001',
+  safetySettings,
+  generationConfig: generationJsonConfig,
+})
+
+export const gemini25ProModel = genAI.getGenerativeModel({
+  model: 'gemini-2.5-pro-exp-02-05',
   safetySettings,
   generationConfig: generationJsonConfig,
 })

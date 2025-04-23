@@ -41,27 +41,41 @@ export type RankingResult = {
   reasoning: string
 }
 
-export type PlatformModel = {
+export interface PlatformModel {
   value: string
   label: string
-  platform: string
-  disabled: boolean
+  platform: 'google' | 'ollama' | 'openai' | 'anthropic' | 'deepseek' | 'openrouter'
+  disabled?: boolean
 }
 
-export type ModelVariant =
-  | 'google__gemini-flash'
-  | 'google__gemini-flash-thinking'
-  | 'google__gemini-exp'
-  | 'gpt-4o'
-  | 'o1-mini'
-  | 'o1'
-  | 'claude-3-7-sonnet-latest'
-  | 'claude-3-5-haiku-latest'
-  | 'deepseek__chat'
-  | 'deepseek__reasoner'
-  | 'ollama__llama3.2'
-  | 'ollama__deepseek-r1:14b'
-  | 'openrouter__auto'
+// Add specific model types for better type checking
+export type OpenAIModel = 
+  | 'gpt-4.1-2025-04-14'
+  | 'gpt-4.1-mini-2025-04-14'
+  | 'o3-2025-04-16'
+
+export type ModelVariant = `${PlatformModel['platform']}__${string}`
+
+export interface ModelConfig {
+  enabled: boolean
+  label: string
+}
+
+export interface PlatformConfig {
+  enabled: boolean
+  models: {
+    [key: string]: ModelConfig
+  }
+}
+
+export interface Platforms {
+  google: PlatformConfig
+  ollama: PlatformConfig
+  openai: PlatformConfig
+  anthropic: PlatformConfig
+  deepseek: PlatformConfig
+  openrouter: PlatformConfig
+}
 
 export type Status = {
   loading: boolean

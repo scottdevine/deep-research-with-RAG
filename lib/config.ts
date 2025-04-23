@@ -1,11 +1,11 @@
+
 export const CONFIG = {
   // Rate limits (requests per minute)
   rateLimits: {
-    enabled: true, // Flag to enable/disable rate limiting
-    search: 10,
-    contentFetch: 20,
-    reportGeneration: 5,
-    agentOptimizations: 10,
+    enabled: false, // Set to false to disable rate limiting
+    search: 5,            // Search requests per minute
+    contentFetch: 20,     // Content fetch requests per minute
+    reportGeneration: 5   // Report generation requests per minute
   },
 
   // Search settings
@@ -25,55 +25,65 @@ export const CONFIG = {
     google: {
       enabled: true,
       models: {
-        'gemini-flash': {
+        // Gemini 2.0 Models
+        'gemini-2.0-flash': {
           enabled: true,
-          label: 'Gemini Flash',
+          label: 'Gemini 2.0 Flash',
         },
-        'gemini-flash-thinking': {
+        'gemini-2.0-pro': {
           enabled: true,
-          label: 'Gemini Flash Thinking',
+          label: 'Gemini 2.0 Pro',
         },
-        'gemini-exp': {
-          enabled: false,
-          label: 'Gemini Exp',
+        // Gemini 2.5 Models
+        'gemini-2.5-flash': {
+          enabled: true,
+          label: 'Gemini 2.5 Flash',
+        },
+        'gemini-2.5-pro': {
+          enabled: true,
+          label: 'Gemini 2.5 Pro',
         },
       },
     },
     ollama: {
       enabled: true,
       models: {
-        'deepseek-r1:1.5b': {
-          enabled: false,
-          label: 'DeepSeek R1 1.5B',
+        'gemma3:27b': {
+          enabled: true,
+          label: 'gemma3:27b',
+        },
+        'qwq:latest': {
+          enabled: true,
+          label: 'qwq:latest',
         },
       },
     },
     openai: {
       enabled: true,
       models: {
-        'gpt-4o': {
-          enabled: false,
-          label: 'GPT-4o',
+        'gpt-4.1-2025-04-14': {  // Latest GPT-4.1
+          enabled: true,
+          label: 'GPT-4.1',
         },
-        'o1-mini': {
-          enabled: false,
-          label: 'o1-mini',
+        'gpt-4.1-mini-2025-04-14': {  // Latest GPT-4.1-mini
+          enabled: true,
+          label: 'GPT-4.1 Mini',
         },
-        o1: {
-          enabled: false,
-          label: 'o1',
-        },
+        'o3-2025-04-16': {  // Latest o3
+          enabled: true,
+          label: 'O3',
+        }
       },
     },
     anthropic: {
       enabled: true,
       models: {
         'claude-3-7-sonnet-latest': {
-          enabled: false,
+          enabled: true,
           label: 'Claude 3.7 Sonnet',
         },
         'claude-3-5-haiku-latest': {
-          enabled: false,
+          enabled: true,
           label: 'Claude 3.5 Haiku',
         },
       },
