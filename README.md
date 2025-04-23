@@ -117,7 +117,7 @@ The app supports both Google Custom Search and Bing Search APIs. You can configu
 ```typescript
 search: {
   resultsPerPage: 10,
-  maxSelectableResults: 3,
+  maxSelectableResults: 20,
   provider: 'google', // 'google' or 'bing'
   safeSearch: {
     google: 'active',  // 'active' or 'off'

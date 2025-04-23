@@ -6,37 +6,68 @@ const BING_ENDPOINT = 'https://api.bing.microsoft.com/v7.0/search'
 const GOOGLE_ENDPOINT = 'https://customsearch.googleapis.com/customsearch/v1'
 const EXA_ENDPOINT = 'https://api.exa.ai/search'
 
-type TimeFilter = '24h' | 'week' | 'month' | 'year' | 'all'
+type TimeFilter = 'month' | '6months' | '12months' | '5years' | '10years' | 'all'
 
 function getBingFreshness(timeFilter: TimeFilter): string {
   switch (timeFilter) {
-    case '24h':
-      return 'Day'
-    case 'week':
-      return 'Week'
     case 'month':
       return 'Month'
-    case 'year':
+    case '6months':
+      // Bing doesn't have a 6-month option, so we use Month
+      return 'Month'
+    case '12months':
       return 'Year'
+    case '5years':
+      // Bing only has up to Year, so we default to no freshness filter
+      return ''
+    case '10years':
+      // Bing only has up to Year, so we default to no freshness filter
+      return ''
+    case 'all':
+      return ''
     default:
       return ''
   }
 }
 
 function getGoogleDateRestrict(timeFilter: TimeFilter): string | null {
-  // Map our timeFilter to Google's dateRestrict values:
-  // d1 for 24h, w1 for week, m1 for month, y1 for year
+  // Map our timeFilter to Google's dateRestrict values
+  // Google uses format [type][number] where type is d/w/m/y and number is the count
   switch (timeFilter) {
-    case '24h':
-      return 'd1'
-    case 'week':
-      return 'w1'
     case 'month':
       return 'm1'
-    case 'year':
+    case '6months':
+      return 'm6'
+    case '12months':
       return 'y1'
+    case '5years':
+      return 'y5'
+    case '10years':
+      return 'y10'
+    case 'all':
+      return null
     default:
       return null
+  }
+}
+
+function getExaRecency(timeFilter: TimeFilter): string {
+  // Map our timeFilter to Exa's recency values
+  switch (timeFilter) {
+    case 'month':
+      return 'month'
+    case '6months':
+      return 'months' // Exa supports 'months' which is typically 6 months
+    case '12months':
+      return 'year'
+    case '5years':
+      return 'years' // Exa supports 'years' which is typically 5-10 years
+    case '10years':
+      return 'years'
+    case 'all':
+      return 'all'
+    default:
+      return 'month' // Default to month if not specified
   }
 }
 
@@ -48,6 +79,7 @@ export async function POST(request: Request) {
       timeFilter = 'all',
       provider = CONFIG.search.provider,
       isTestQuery = false,
+      page = 1, // Add pagination support
     } = body
 
     if (!query) {
@@ -125,11 +157,17 @@ export async function POST(request: Request) {
             query,
             type: 'auto',
             numResults: CONFIG.search.resultsPerPage,
+            // Add pagination for Exa API
+            offset: (page - 1) * CONFIG.search.resultsPerPage,
             contents: {
               text: {
                 maxCharacters: 500,
               },
             },
+            // Add time filter for Exa API
+            ...(timeFilter !== 'all' && {
+              recency: getExaRecency(timeFilter as TimeFilter),
+            }),
           }),
         })
 
@@ -152,6 +190,9 @@ export async function POST(request: Request) {
         }
 
         // Transform Exa results to match our format
+        const totalResults = response.totalCount || response.results.length
+        const totalPages = Math.ceil(totalResults / CONFIG.search.resultsPerPage)
+
         const transformedResults = {
           webPages: {
             value: response.results.map((item: any) => ({
@@ -166,6 +207,12 @@ export async function POST(request: Request) {
               score: item.score || undefined,
             })),
           },
+          // Add pagination information
+          pagination: {
+            currentPage: page,
+            totalPages,
+            totalResults,
+          }
         }
 
         return NextResponse.json(transformedResults)
@@ -192,11 +239,15 @@ export async function POST(request: Request) {
         )
       }
 
+      // Calculate start index for pagination (1-based index)
+      const startIndex = ((page - 1) * CONFIG.search.resultsPerPage) + 1
+
       const params = new URLSearchParams({
         q: query,
         key: googleApiKey,
         cx: googleCx,
         num: CONFIG.search.resultsPerPage.toString(),
+        start: startIndex.toString(), // Add pagination parameter
       })
 
       // Add Google's dateRestrict parameter if a time filter is applied
@@ -237,6 +288,10 @@ export async function POST(request: Request) {
 
       const data = await googleResponse.json()
 
+      // Calculate total results and pages
+      const totalResults = data.searchInformation?.totalResults ? parseInt(data.searchInformation.totalResults) : 0
+      const totalPages = Math.ceil(totalResults / CONFIG.search.resultsPerPage)
+
       // Transform Google search results to match our format
       const transformedResults = {
         webPages: {
@@ -248,6 +303,12 @@ export async function POST(request: Request) {
               snippet: item.snippet,
             })) || [],
         },
+        // Add pagination information
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalResults,
+        }
       }
 
       return NextResponse.json(transformedResults)
@@ -264,9 +325,13 @@ export async function POST(request: Request) {
         )
       }
 
+      // Calculate offset for pagination
+      const offset = (page - 1) * CONFIG.search.resultsPerPage
+
       const params = new URLSearchParams({
         q: query,
         count: CONFIG.search.resultsPerPage.toString(),
+        offset: offset.toString(), // Add pagination parameter
         mkt: CONFIG.search.market,
         safeSearch: CONFIG.search.safeSearch.bing,
         textFormat: 'HTML',
@@ -325,7 +390,22 @@ export async function POST(request: Request) {
       }
 
       const data = await bingResponse.json()
-      return NextResponse.json(data)
+
+      // Add pagination information to Bing response
+      const totalResults = data.webPages?.totalEstimatedMatches || 0
+      const totalPages = Math.ceil(totalResults / CONFIG.search.resultsPerPage)
+
+      // Add pagination information to the response
+      const responseWithPagination = {
+        ...data,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalResults,
+        }
+      }
+
+      return NextResponse.json(responseWithPagination)
     }
   } catch (error) {
     console.error('Search API error:', error)

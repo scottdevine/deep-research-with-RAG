@@ -49,7 +49,7 @@ export interface PlatformModel {
 }
 
 // Add specific model types for better type checking
-export type OpenAIModel = 
+export type OpenAIModel =
   | 'gpt-4.1-2025-04-14'
   | 'gpt-4.1-mini-2025-04-14'
   | 'o3-2025-04-16'
@@ -106,6 +106,11 @@ export type State = {
   sidebarOpen: boolean
   activeTab: string
   status: Status
+  // Pagination related fields
+  currentPage: number
+  totalPages: number
+  totalResults: number
+  allResults: SearchResult[][] // Array of result pages
 }
 
 // Flow Component Types

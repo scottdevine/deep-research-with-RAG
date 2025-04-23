@@ -491,7 +491,7 @@ function useResearchFlow(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             query,
-            timeFilter: 'all',
+            timeFilter: 'month', // Default to past month
             platformModel: selectedModel,
           }),
         })

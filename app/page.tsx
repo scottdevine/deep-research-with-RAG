@@ -42,11 +42,12 @@ import { handleLocalFile, SUPPORTED_FILE_TYPES } from '@/lib/file-upload'
 import { CitationsFooter } from '@/components/citations-footer'
 
 const timeFilters = [
-  { value: 'all', label: 'Any time' },
-  { value: '24h', label: 'Past 24 hours' },
-  { value: 'week', label: 'Past week' },
   { value: 'month', label: 'Past month' },
-  { value: 'year', label: 'Past year' },
+  { value: '6months', label: 'Past 6 months' },
+  { value: '12months', label: 'Past 12 months' },
+  { value: '5years', label: 'Past 5 years' },
+  { value: '10years', label: 'Past 10 years' },
+  { value: 'all', label: 'Any time' },
 ] as const
 
 const MAX_SELECTIONS = CONFIG.search.maxSelectableResults
@@ -80,7 +81,7 @@ export default function Home() {
   // Consolidated state management
   const [state, setState] = useState<State>({
     query: '',
-    timeFilter: 'all',
+    timeFilter: 'month',
     results: [],
     selectedResults: [],
     reportPrompt: '',
@@ -100,6 +101,11 @@ export default function Home() {
       agentInsights: [],
       searchQueries: [],
     },
+    // Initialize pagination state
+    currentPage: 1,
+    totalPages: 0,
+    totalResults: 0,
+    allResults: [],
   })
 
   const { toast } = useToast()
@@ -352,6 +358,10 @@ export default function Home() {
       updateState({ error: null, reportPrompt: '' })
 
       try {
+        // If this is a new search (not pagination), reset pagination state
+        const isNewSearch = e.type === 'submit'
+        const pageToFetch = isNewSearch ? 1 : state.currentPage
+
         const response = await retryWithBackoff(async () => {
           const res = await fetch('/api/search', {
             method: 'POST',
@@ -359,6 +369,7 @@ export default function Home() {
             body: JSON.stringify({
               query: state.query,
               timeFilter: state.timeFilter,
+              page: pageToFetch,
             }),
           })
 
@@ -379,19 +390,40 @@ export default function Home() {
           })
         )
 
-        setState((prev) => ({
-          ...prev,
-          results: [
-            ...prev.results.filter(
-              (r) => r.isCustomUrl || prev.selectedResults.includes(r.id)
-            ),
-            ...newResults.filter(
-              (newResult: SearchResult) =>
-                !prev.results.some((existing) => existing.url === newResult.url)
-            ),
-          ],
-          error: null,
-        }))
+        // Extract pagination information
+        const { currentPage, totalPages, totalResults } = response.pagination || {
+          currentPage: pageToFetch,
+          totalPages: 1,
+          totalResults: newResults.length
+        }
+
+        // Update allResults array with the new page of results
+        const updatedAllResults = [...(state.allResults || [])]
+        updatedAllResults[currentPage - 1] = newResults
+
+        setState((prev) => {
+          // For a new search, we want to replace results
+          // For pagination, we want to show just the current page
+          const displayResults = newResults
+
+          return {
+            ...prev,
+            results: [
+              ...prev.results.filter(
+                (r) => r.isCustomUrl || prev.selectedResults.includes(r.id)
+              ),
+              ...displayResults.filter(
+                (newResult: SearchResult) =>
+                  !prev.results.some((existing) => existing.url === newResult.url)
+              ),
+            ],
+            currentPage,
+            totalPages,
+            totalResults,
+            allResults: updatedAllResults,
+            error: null,
+          }
+        })
       } catch (error) {
         handleError(error, 'Search Error')
       } finally {
@@ -745,6 +777,36 @@ export default function Home() {
       updateState,
       updateStatus,
     ]
+  )
+
+  // Define a function to handle page changes
+  const handlePageChangeImpl = (newPage: number) => {
+    // Check if we already have this page in our allResults array
+    if (state.allResults[newPage - 1]?.length > 0) {
+      // We already have this page, just update the current page and display those results
+      setState((prev) => ({
+        ...prev,
+        currentPage: newPage,
+        results: [
+          ...prev.results.filter(
+            (r) => r.isCustomUrl || prev.selectedResults.includes(r.id)
+          ),
+          ...prev.allResults[newPage - 1],
+        ],
+      }))
+    } else {
+      // We need to fetch this page
+      setState((prev) => ({ ...prev, currentPage: newPage }))
+      // Create a synthetic event to trigger the search
+      const event = { preventDefault: () => {}, type: 'pagination' } as React.FormEvent
+      handleSearch(event)
+    }
+  }
+
+  // Memoized pagination handler
+  const handlePageChange = useCallback(
+    (newPage: number) => handlePageChangeImpl(newPage),
+    [state.allResults, state.results, state.selectedResults, state.currentPage]
   )
 
   // Memoized utility functions
@@ -1169,7 +1231,7 @@ export default function Home() {
                 <div className='text-sm text-gray-600 text-center sm:text-left space-y-1'>
                   <p>
                     {state.selectedResults.length === 0
-                      ? 'Select up to 3 results to generate a report'
+                      ? 'Select up to 20 results to generate a report'
                       : state.selectedModel
                       ? `${state.selectedResults.length} of ${MAX_SELECTIONS} results selected`
                       : 'Please select a model above to generate a report'}
@@ -1288,6 +1350,79 @@ export default function Home() {
                         </CardContent>
                       </Card>
                     ))}
+
+                  {/* Pagination Controls */}
+                  {state.totalPages > 1 && (
+                    <div className='flex justify-center items-center mt-6 space-x-2'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => handlePageChange(1)}
+                        disabled={state.currentPage === 1 || state.status.loading}
+                      >
+                        1
+                      </Button>
+
+                      {state.currentPage > 3 && (
+                        <span className='text-gray-500'>...</span>
+                      )}
+
+                      {Array.from({ length: Math.min(5, state.totalPages) }, (_, i) => {
+                        // Calculate the page numbers to show
+                        let pageNum;
+                        if (state.currentPage <= 3) {
+                          // Show pages 2-6 if we're near the beginning
+                          pageNum = i + 2;
+                        } else if (state.currentPage >= state.totalPages - 2) {
+                          // Show the last 5 pages if we're near the end
+                          pageNum = state.totalPages - 5 + i + 1;
+                        } else {
+                          // Show 2 pages before and 2 pages after current page
+                          pageNum = state.currentPage - 2 + i;
+                        }
+
+                        // Only show if the page number is valid and not already shown
+                        if (pageNum > 1 && pageNum < state.totalPages && pageNum <= 9) {
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={state.currentPage === pageNum ? 'default' : 'outline'}
+                              size='sm'
+                              onClick={() => handlePageChange(pageNum)}
+                              disabled={state.status.loading}
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        }
+                        return null;
+                      })}
+
+                      {state.totalPages > 6 && state.currentPage < state.totalPages - 2 && (
+                        <span className='text-gray-500'>...</span>
+                      )}
+
+                      {state.totalPages > 1 && (
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={() => handlePageChange(state.totalPages)}
+                          disabled={state.currentPage === state.totalPages || state.status.loading}
+                        >
+                          {state.totalPages}
+                        </Button>
+                      )}
+
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => handlePageChange(state.currentPage + 1)}
+                        disabled={state.currentPage === state.totalPages || state.status.loading}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
                 </TabsContent>
 
                 <TabsContent value='report'>
@@ -1303,13 +1438,13 @@ export default function Home() {
                             prompt={state.reportPrompt}
                           />
                         </div>
-                        
+
                         {/* Scrollable content area with proper height constraint */}
                         <div className='max-h-[800px] overflow-y-auto pr-2' style={{ scrollbarWidth: 'thin' }}>
                           <p className='text-lg text-gray-700 mb-6'>
                             {state.report?.summary}
                           </p>
-                          
+
                           {state.report?.sections?.map((section, index) => (
                             <div key={index} className='space-y-3 border-t pt-4 mb-6'>
                               <h3 className='text-xl font-semibold text-gray-700'>
@@ -1322,7 +1457,7 @@ export default function Home() {
                               </div>
                             </div>
                           ))}
-                          
+
                           {/* Citations Section */}
                           {state.report && <CitationsFooter report={state.report} />}
                         </div>
