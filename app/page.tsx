@@ -331,7 +331,8 @@ export default function Home() {
                 sources: state.results.filter((r) =>
                   state.selectedResults.includes(r.id)
                 ),
-                prompt: `${state.query}. Provide comprehensive analysis.`,
+                prompt: state.reportPrompt,
+                originalQuery: state.query, // Pass the original search query
                 platformModel: state.selectedModel,
               }),
             })
@@ -378,7 +379,7 @@ export default function Home() {
         const requestBody = {
           query: state.query,
           timeFilter: state.timeFilter,
-          page: pageToFetch,
+          fetchAll: true, // Fetch all results at once for client-side pagination
           includePubMed: state.includePubMed,
         }
 
@@ -401,45 +402,49 @@ export default function Home() {
           return res.json()
         })
 
-        const newResults = (response.webPages?.value || []).map(
+        // Process all results with unique IDs
+        const allResults = (response.webPages?.value || []).map(
           (result: SearchResult, index: number) => ({
             ...result,
-            id: `search-page${pageToFetch}-${index}-${result.id || encodeURIComponent(result.url)}`,
+            id: `search-${index}-${result.id || encodeURIComponent(result.url)}`,
           })
         )
 
-        // Extract pagination information
-        const { currentPage, totalPages, totalResults } = response.pagination || {
-          currentPage: pageToFetch,
-          totalPages: 1,
-          totalResults: newResults.length
+        console.log(`Received ${allResults.length} total results`)
+
+        // Create pages for client-side pagination
+        const resultsPerPage = CONFIG.search.resultsPerPage
+        const paginatedResults: SearchResult[][] = []
+
+        // Distribute results across pages
+        for (let i = 0; i < allResults.length; i += resultsPerPage) {
+          const pageIndex = Math.floor(i / resultsPerPage)
+          paginatedResults[pageIndex] = allResults.slice(i, i + resultsPerPage)
         }
 
-        // Update allResults array with the new page of results
-        const updatedAllResults = [...(state.allResults || [])]
-        updatedAllResults[currentPage - 1] = newResults
+        // Calculate total pages based on the actual results
+        const totalResults = allResults.length
+        const totalPages = Math.ceil(totalResults / resultsPerPage)
+        const currentPage = 1 // Always start at page 1 for a new search
+
+        console.log(`Created ${paginatedResults.length} pages of results`)
 
         setState((prev) => {
-          // For a new search, we want to replace results
-          // For pagination, we want to show just the current page
-          const displayResults = newResults
+          // Get the first page of results to display
+          const displayResults = paginatedResults[0] || []
 
           return {
             ...prev,
             results: [
-              ...prev.results.filter(
-                (r) => r.isCustomUrl || prev.selectedResults.includes(r.id)
-              ),
-              ...displayResults.filter(
-                (newResult: SearchResult) =>
-                  !prev.results.some((existing) => existing.url === newResult.url)
-              ),
+              ...prev.results.filter(r => r.isCustomUrl),
+              ...displayResults
             ],
             currentPage,
             totalPages,
             totalResults,
-            allResults: updatedAllResults,
+            allResults: paginatedResults, // Store all paginated results for client-side pagination
             error: null,
+            resultsPrioritized: false, // Reset prioritization flag for new search
           }
         })
       } catch (error) {
@@ -765,6 +770,7 @@ export default function Home() {
               selectedResults: contentResults.filter((r) => r.content?.trim()),
               sources: selected,
               prompt: `${optimizedPrompt}. Provide comprehensive analysis.`,
+              originalQuery: state.reportPrompt, // Pass the original query
               platformModel: state.selectedModel,
             }),
           }).then((res) => res.json())
@@ -805,23 +811,17 @@ export default function Home() {
     updateState({ error: null })
 
     try {
-      console.log('Fetching multiple pages, up to', maxResults, 'results')
-      // Calculate how many pages we need to fetch to get maxResults
-      const resultsPerPage = CONFIG.search.resultsPerPage
-      const pagesToFetch = Math.min(10, Math.ceil(maxResults / resultsPerPage))
+      console.log('Fetching all results at once, up to', maxResults, 'results')
 
-      let allResults: SearchResult[] = []
-      let totalPagesAvailable = 1
-
-      // Fetch first page to get total pages information
-      const firstPageResponse = await retryWithBackoff(async () => {
+      // Use the fetchAll parameter to get all results at once
+      const response = await retryWithBackoff(async () => {
         const res = await fetch('/api/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             query: state.query,
             timeFilter: state.timeFilter,
-            page: 1,
+            fetchAll: true,
             includePubMed: state.includePubMed,
           }),
         })
@@ -834,76 +834,28 @@ export default function Home() {
         return res.json()
       })
 
-      // Process first page results
-      const firstPageResults = (firstPageResponse.webPages?.value || []).map(
+      // Process all results with unique IDs
+      const allResults = (response.webPages?.value || []).map(
         (result: SearchResult, index: number) => ({
           ...result,
-          id: `search-page1-${index}-${result.id || encodeURIComponent(result.url)}`,
+          id: `search-all-${index}-${result.id || encodeURIComponent(result.url)}`,
         })
       )
 
-      allResults = [...firstPageResults]
+      console.log(`Fetched ${allResults.length} total results`)
 
-      // Get pagination info
-      const { totalPages } = firstPageResponse.pagination || { totalPages: 1 }
-      totalPagesAvailable = totalPages
-      const actualPagesToFetch = Math.min(pagesToFetch, totalPages)
-
-      console.log(`Found ${totalPages} total pages, fetching ${actualPagesToFetch} pages`)
-
-      // Fetch remaining pages in parallel
-      if (actualPagesToFetch > 1) {
-        const pagePromises = []
-
-        for (let page = 2; page <= actualPagesToFetch; page++) {
-          pagePromises.push(
-            retryWithBackoff(async () => {
-              const res = await fetch('/api/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  query: state.query,
-                  timeFilter: state.timeFilter,
-                  page,
-                  includePubMed: state.includePubMed,
-                }),
-              })
-
-              if (!res.ok) {
-                throw new Error(`Failed to fetch page ${page}`)
-              }
-
-              return res.json()
-            })
-          )
-        }
-
-        // Wait for all pages to be fetched
-        const pageResponses = await Promise.all(pagePromises)
-
-        // Process and add results from each page
-        for (let pageIndex = 0; pageIndex < pageResponses.length; pageIndex++) {
-          const pageResponse = pageResponses[pageIndex];
-          const pageNumber = pageIndex + 2; // Pages start from 2 since we already processed page 1
-
-          const pageResults = (pageResponse.webPages?.value || []).map(
-            (result: SearchResult, resultIndex: number) => ({
-              ...result,
-              id: `search-page${pageNumber}-${resultIndex}-${result.id || encodeURIComponent(result.url)}`,
-            })
-          )
-
-          allResults = [...allResults, ...pageResults]
-        }
-      }
-
+      // Limit to maxResults
       const finalResults = allResults.slice(0, maxResults)
-      console.log(`Fetched ${finalResults.length} total results across ${actualPagesToFetch} pages`)
+
+      // Calculate pagination info for client-side use
+      const resultsPerPage = CONFIG.search.resultsPerPage
+      const totalResults = finalResults.length
+      const totalPages = Math.ceil(totalResults / resultsPerPage)
 
       return {
         results: finalResults,
-        totalPages: totalPagesAvailable,
-        totalResults: Math.min(totalPagesAvailable * resultsPerPage, maxResults)
+        totalPages,
+        totalResults
       }
     } catch (error) {
       console.error('Error fetching multiple pages:', error)
@@ -916,7 +868,7 @@ export default function Home() {
     } finally {
       updateStatus({ loading: false })
     }
-  }, [state.query, state.timeFilter, updateStatus, updateState, handleError])
+  }, [state.query, state.timeFilter, state.includePubMed, updateStatus, updateState, handleError])
 
   // Function to prioritize search results using LLM
   const handlePrioritizeResults = useCallback(async () => {
@@ -1053,8 +1005,16 @@ export default function Home() {
 
   // Define a function to handle page changes
   const handlePageChangeImpl = (newPage: number) => {
+    console.log(`Changing to page ${newPage}, current state:`, {
+      currentPage: state.currentPage,
+      totalPages: state.totalPages,
+      hasStoredPage: state.allResults[newPage - 1]?.length > 0
+    })
+
     // Check if we already have this page in our allResults array
     if (state.allResults[newPage - 1]?.length > 0) {
+      console.log(`Using cached results for page ${newPage}:`, state.allResults[newPage - 1])
+
       // We already have this page, just update the current page and display those results
       setState((prev) => ({
         ...prev,
@@ -1067,30 +1027,21 @@ export default function Home() {
         ],
       }))
     } else {
-      // If results are prioritized, we shouldn't fetch new results
-      // as all prioritized results should already be in allResults
-      if (state.resultsPrioritized) {
-        console.warn('Attempted to navigate to a page beyond prioritized results')
-        toast({
-          title: 'Navigation Error',
-          description: 'Cannot navigate beyond prioritized results',
-          variant: 'destructive',
-        })
-        return
-      }
+      console.warn(`Page ${newPage} not found in cached results`)
 
-      // We need to fetch this page
-      setState((prev) => ({ ...prev, currentPage: newPage }))
-      // Create a synthetic event to trigger the search
-      const event = { preventDefault: () => {}, type: 'pagination' } as React.FormEvent
-      handleSearch(event)
+      // If we don't have the page, show a message
+      toast({
+        title: 'Navigation Error',
+        description: 'Page not found in cached results',
+        variant: 'destructive',
+      })
     }
   }
 
   // Memoized pagination handler
   const handlePageChange = useCallback(
     (newPage: number) => handlePageChangeImpl(newPage),
-    [state.allResults, state.results, state.selectedResults, state.currentPage, state.resultsPrioritized, toast]
+    [state.allResults, state.results, state.selectedResults, state.currentPage, toast]
   )
 
   // Memoized utility functions
@@ -1292,16 +1243,16 @@ export default function Home() {
             >
               {!state.isAgentMode ? (
                 <>
-                  <div className='flex flex-col sm:flex-row gap-2'>
-                    <div className='relative flex-1'>
-                      <Input
-                        type='text'
+                  <div className='flex flex-col gap-4'>
+                    <div className='relative w-full'>
+                      <textarea
                         value={state.query}
                         onChange={(e) => updateState({ query: e.target.value })}
                         placeholder='Enter your search query...'
-                        className='pr-8'
+                        className='w-full min-h-[200px] p-3 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y'
+                        rows={10}
                       />
-                      <Search className='absolute right-2 top-2 h-5 w-5 text-gray-400' />
+                      <Search className='absolute right-3 top-3 h-5 w-5 text-gray-400' />
                     </div>
 
                     <div className='flex flex-col sm:flex-row gap-2 sm:items-center'>
@@ -1421,9 +1372,9 @@ export default function Home() {
                 </>
               ) : (
                 <div className='space-y-4 sm:space-y-6 lg:space-y-0'>
-                  <div className='flex flex-col sm:flex-row lg:items-center gap-2'>
-                    <div className='relative flex-1'>
-                      <Input
+                  <div className='flex flex-col gap-4'>
+                    <div className='relative w-full'>
+                      <textarea
                         value={state.query || state.reportPrompt}
                         onChange={(e) => {
                           updateState({
@@ -1432,9 +1383,10 @@ export default function Home() {
                           })
                         }}
                         placeholder="What would you like to research? (e.g., 'Tesla Q4 2024 financial performance and market impact')"
-                        className='pr-8 text-lg'
+                        className='w-full min-h-[200px] p-3 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y text-lg'
+                        rows={10}
                       />
-                      <Brain className='absolute right-4 top-3 h-5 w-5 text-gray-400' />
+                      <Brain className='absolute right-3 top-3 h-5 w-5 text-gray-400' />
                     </div>
                     <div className='flex flex-col sm:flex-row lg:flex-nowrap gap-2 sm:items-center'>
                       <div className='w-full sm:w-[200px]'>
@@ -1495,17 +1447,18 @@ export default function Home() {
             >
               <div className='mb-6 space-y-4'>
                 {state.selectedResults.length > 0 && !state.isAgentMode && (
-                  <div className='flex flex-col sm:flex-row gap-2'>
-                    <div className='relative flex-1'>
-                      <Input
+                  <div className='flex flex-col gap-4'>
+                    <div className='relative w-full'>
+                      <textarea
                         value={state.reportPrompt}
                         onChange={(e) =>
                           updateState({ reportPrompt: e.target.value })
                         }
                         placeholder="What would you like to know about these sources? (e.g., 'Compare and analyze the key points')"
-                        className='pr-8'
+                        className='w-full min-h-[150px] p-3 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-y'
+                        rows={6}
                       />
-                      <FileText className='absolute right-2 top-2.5 h-5 w-5 text-gray-400' />
+                      <FileText className='absolute right-3 top-3 h-5 w-5 text-gray-400' />
                     </div>
                     <Button
                       onClick={generateReport}

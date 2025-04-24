@@ -18,15 +18,19 @@ Open Deep Research combines powerful tools to streamline research and report cre
 
 ## Features
 
-- 🔍 Flexible web search with Google or Bing APIs
+- 🔍 Flexible web search with Google, Bing, and PubMed APIs
 - ⏱️ Time-based filtering of search results
 - 📄 Content extraction from web pages
 - 🤖 Multi-platform AI support (Google Gemini, OpenAI GPT, Anthropic Sonnet)
 - 🎯 Flexible model selection with granular configuration
-- 📊 Multiple export formats (PDF, Word, Text)
+- 📊 Multiple export formats (PDF, Word, Text) with references and hyperlinks
 - 🧠 Knowledge Base for saving and accessing past reports
 - ⚡ Rate limiting for stability
 - 📱 Responsive design
+- 🔄 Result prioritization using AI to rank search results by relevance
+- 📋 Larger search input area for complex queries
+- 📑 Pagination support for viewing more search results
+- 🔬 Improved report generation with better alignment to original queries
 
 ### Local File Support
 
@@ -112,7 +116,7 @@ Note: If you set `enabled: false`, you can run the application without setting u
 
 ### Search Provider Configuration
 
-The app supports both Google Custom Search and Bing Search APIs. You can configure your preferred search provider in `lib/config.ts`:
+The app supports Google Custom Search, Bing Search, and PubMed APIs. You can configure your preferred search provider in `lib/config.ts`:
 
 ```typescript
 search: {
@@ -307,6 +311,67 @@ platforms: {
 
 Local models through Ollama bypass rate limiting since they run on your machine. This makes them perfect for development, testing, or when you need unlimited generations.
 
+## How to Use Open Deep Research
+
+### Basic Usage
+
+1. **Enter a Search Query**:
+   - Type your research question or topic in the large search input area
+   - Select a time filter (Past day, Past week, Past month, Past year, or Any time)
+   - Choose whether to include PubMed results by checking the "Include PubMed Results" option
+   - Select your preferred AI model from the dropdown menu
+   - Click "Search" to retrieve results
+
+2. **Review and Select Search Results**:
+   - Browse through the search results displayed
+   - Use the pagination controls at the bottom to view more results
+   - Click the "Prioritize All Results" button to have the AI rank results by relevance to your query
+   - Select up to 20 results by checking the boxes next to them
+
+3. **Generate a Report**:
+   - After selecting results, enter a specific question or prompt for your report
+   - Click "Generate Report" to create a comprehensive analysis
+   - The report will appear in the "Report" tab with a title, summary, and detailed sections
+
+4. **Work with the Report**:
+   - View the complete report with all sections
+   - Use the buttons at the top right to:
+     - Copy the report to clipboard
+     - Save the report to your Knowledge Base
+     - Download the report in PDF, Word, or Text format (all include references with hyperlinks)
+
+### Advanced Features
+
+1. **Agent Mode**:
+   - Check the "Agent Mode" box at the top of the page for automated research
+   - Enter your research topic and click "Start Deep Research"
+   - The system will automatically:
+     - Optimize your query
+     - Search for relevant results
+     - Analyze and prioritize the findings
+     - Generate a comprehensive report
+
+2. **Custom URLs and File Upload**:
+   - Add specific URLs by entering them in the "Add custom URL" field
+   - Upload local files (PDF, DOCX, TXT) using the "Upload File" button
+   - These custom sources will appear at the top of your search results
+
+3. **Result Prioritization**:
+   - After searching, click "Prioritize All Results" to have the AI analyze and rank results
+   - Results will be scored based on relevance, credibility, and information quality
+   - Higher-scored results will move to the top with percentage ratings
+
+4. **Knowledge Base**:
+   - Save reports for future reference by clicking the "Save to Knowledge Base" button
+   - Access your saved reports by clicking "View Knowledge Base" at the top of the page
+   - Review and reload past reports at any time
+
+5. **Flow Feature**:
+   - Access the Flow feature for deep, recursive research
+   - Create visual research maps with interconnected reports
+   - Generate follow-up queries based on initial findings
+   - Consolidate multiple reports into comprehensive summaries
+
 ## Getting Started
 
 ### Prerequisites
@@ -479,6 +544,39 @@ You'll need two components to use Google Custom Search:
 2. Create a new Redis database
 3. Copy the REST URL and REST Token
 
+## Recent Improvements
+
+The application has been enhanced with several new features and improvements:
+
+### 1. PubMed Integration
+- Added support for searching PubMed's extensive database of medical and scientific literature
+- Integrated PubMed results with web search results for comprehensive research
+- Added a toggle to include/exclude PubMed results based on research needs
+
+### 2. Search Results Enhancements
+- Implemented pagination to navigate through large result sets (up to 100 results)
+- Added AI-powered result prioritization to rank search results by relevance to your query
+- Results now display relevance scores and reasoning for prioritization decisions
+- Improved the handling of combined search results from multiple sources
+
+### 3. User Interface Improvements
+- Enlarged the search input area to accommodate complex queries
+- Made the search input as wide as the report window for better visibility
+- Improved the layout and spacing of UI elements for better usability
+- Enhanced the responsiveness of the interface on different screen sizes
+
+### 4. Report Generation Improvements
+- Enhanced report prompts to better align with original search queries
+- Added explicit instructions to maintain the core intent of user queries
+- Improved the quality and relevance of generated reports
+- Added references with hyperlinks to all downloaded report formats (PDF, Word, Text)
+
+### 5. Document Export Enhancements
+- All downloaded documents now include properly formatted references
+- Added clickable hyperlinks in PDF and Word documents
+- Improved the formatting and layout of exported documents
+- Enhanced citation handling to only include relevant sources
+
 ## Tech Stack
 
 - [Next.js 15](https://nextjs.org/) - React framework
@@ -488,6 +586,7 @@ You'll need two components to use Google Custom Search:
 - [JinaAI](https://jina.ai/) - Content extraction
 - [Azure Bing Search](https://www.microsoft.com/en-us/bing/apis/bing-web-search-api) - Web search
 - [Google Custom Search](https://developers.google.com/custom-search/v1/overview) - Web search
+- [PubMed API](https://www.ncbi.nlm.nih.gov/home/develop/api/) - Medical research
 - [Upstash Redis](https://upstash.com/) - Rate limiting
 - [jsPDF](https://github.com/parallax/jsPDF) & [docx](https://github.com/dolanmiu/docx) - Document generation
 

@@ -82,6 +82,13 @@ Your task is to:
 2. Create an optimized research prompt that will guide the final report generation
 3. Suggest a logical structure for organizing the research
 
+IMPORTANT CONSTRAINTS:
+- The optimized research prompt MUST maintain the core intent and focus of the original topic
+- Do NOT shift the focus to a different aspect or change the fundamental question being asked
+- Your optimization should clarify and enhance the original request WITHOUT changing its essential nature
+- If the original topic asks about X, the optimized prompt must still be primarily about X
+- Preserve any specific requirements, comparisons, or analyses requested in the original topic
+
 The query should:
 - Cover the core aspects of the topic
 - Use relevant technical terms and synonyms

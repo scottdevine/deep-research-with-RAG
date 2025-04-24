@@ -14,11 +14,13 @@ export async function POST(request: Request) {
       selectedResults,
       sources,
       prompt,
+      originalQuery = prompt, // Default to prompt if not provided
       platformModel = 'google-gemini-flash',
     } = body as {
       selectedResults: Article[]
       sources: any[]
       prompt: string
+      originalQuery?: string
       platformModel: ModelVariant
     }
 
@@ -61,8 +63,17 @@ export async function POST(request: Request) {
     }
 
     const generateSystemPrompt = (articles: Article[], userPrompt: string) => {
-      return `You are a research assistant tasked with creating a comprehensive report based on multiple sources. 
+      // Check if originalQuery is different from userPrompt
+      const isOptimized = originalQuery !== userPrompt;
+
+      return `You are a research assistant tasked with creating a comprehensive report based on multiple sources.
 The report should specifically address this request: "${userPrompt}"
+
+${isOptimized ? `IMPORTANT: This request is derived from the original user query: "${originalQuery}".
+You MUST ensure your report stays aligned with the core intent and focus of the original query.
+Do NOT shift focus to a different aspect or change the fundamental question being asked.
+If the original query asks about X, your report must still be primarily about X.
+Preserve any specific requirements, comparisons, or analyses requested in the original query.` : ''}
 
 Your report should:
 1. Have a clear title that reflects the specific analysis requested
@@ -114,7 +125,7 @@ CITATION GUIDELINES:
    - Specific statistics, figures, or data points
    - Non-obvious facts or claims that need verification
    - Controversial statements
-   
+
 2. DO NOT use citations for:
    - General knowledge
    - Your own analysis or synthesis of information
@@ -122,9 +133,9 @@ CITATION GUIDELINES:
    - Every sentence or paragraph
 
 3. When needed, use superscript citation numbers in square brackets [¹], [²], etc. at the end of the relevant sentence
-   
+
 4. The citation numbers correspond directly to the source numbers provided in the list
-   
+
 5. Be judicious and selective with citations - a well-written report should flow naturally with citations only where they truly add credibility
 
 6. You DO NOT need to cite every source provided. Only cite the sources that contain information directly relevant to the report. Track which sources you actually cite and include their numbers in the "usedSources" array in the output JSON.

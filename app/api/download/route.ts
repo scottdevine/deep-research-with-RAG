@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       case 'txt':
       default:
         console.log('Generating TXT')
+        // Generate text content with references
         content = `
 ${report.title}
 
@@ -47,7 +48,26 @@ ${section.content}
 `
   )
   .join('\n')}
-`.trim()
+`
+        // Filter sources if usedSources is available
+        const filteredSources =
+          report.usedSources && report.usedSources.length > 0 && report.sources
+            ? report.sources.filter((_, index) =>
+                report.usedSources!.map((num) => num - 1).includes(index)
+              )
+            : report.sources
+
+        // Add references if sources are available
+        if (filteredSources && filteredSources.length > 0) {
+          content += `
+References:
+${filteredSources
+  .map((source, index) => `${index + 1}. ${source.name} - ${source.url}`)
+  .join('\n')}
+`
+        }
+
+        content = content.trim()
         headers.set('Content-Type', 'text/plain')
         break
     }
@@ -73,4 +93,4 @@ ${section.content}
       { status: 500 }
     )
   }
-} 
+}

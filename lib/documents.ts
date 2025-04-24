@@ -97,6 +97,54 @@ export async function generateDocx(report: Report): Promise<Buffer> {
                 alignment: AlignmentType.JUSTIFIED,
               }),
             ]),
+
+            // References section
+            ...(report.sources && report.sources.length > 0 ? [
+              // References header
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: 'References',
+                    size: 32,
+                    bold: true,
+                  }),
+                ],
+                spacing: { before: 800, after: 400 },
+                alignment: AlignmentType.LEFT,
+              }),
+              // References list
+              ...(() => {
+                // Filter sources if usedSources is available
+                const filteredSources =
+                  report.usedSources && report.usedSources.length > 0 && report.sources
+                    ? report.sources.filter((_, index) =>
+                        report.usedSources!.map((num) => num - 1).includes(index)
+                      )
+                    : report.sources;
+
+                return filteredSources.map((source, index) =>
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: `${index + 1}. ${source.name} - `,
+                        size: 24,
+                      }),
+                      new TextRun({
+                        text: source.url,
+                        size: 24,
+                        color: '0000FF',
+                        underline: {
+                          type: 'single',
+                          color: '0000FF',
+                        },
+                      }),
+                    ],
+                    spacing: { before: 200, after: 200 },
+                    alignment: AlignmentType.LEFT,
+                  })
+                );
+              })(),
+            ] : []),
           ],
         },
       ],
@@ -231,6 +279,45 @@ export function generatePdf(report: Report): Buffer {
       currentY = addText(contentHtml, currentY, 12, false, true, true)
       currentY += 2 // Reduced from 5 to 2
     })
+
+    // Add References section if sources are available
+    if (report.sources && report.sources.length > 0) {
+      currentY += 5 // Add extra space before references
+
+      // References title
+      currentY = addText('References', currentY, 16, true)
+      currentY += 2
+
+      // Filter sources if usedSources is available
+      const filteredSources =
+        report.usedSources && report.usedSources.length > 0 && report.sources
+          ? report.sources.filter((_, index) =>
+              report.usedSources!.map((num) => num - 1).includes(index)
+            )
+          : report.sources
+
+      // Add each reference
+      filteredSources.forEach((source, index) => {
+        const refText = `${index + 1}. ${source.name} - ${source.url}`
+        currentY = addText(refText, currentY, 10, false, false, false)
+
+        // Add link annotation
+        const textWidth = doc.getTextWidth(`${index + 1}. ${source.name} - `)
+        const urlWidth = doc.getTextWidth(source.url)
+        const urlStart = margin + textWidth
+
+        // Add a clickable link
+        doc.link(
+          urlStart,
+          currentY - 10, // Position slightly above the text
+          urlWidth,
+          5, // Height of the link area
+          { url: source.url }
+        )
+
+        currentY += 1 // Small space between references
+      })
+    }
 
     // Add page numbers
     const pageCount = doc.internal.pages.length - 1
