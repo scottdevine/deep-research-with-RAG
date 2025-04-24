@@ -1,0 +1,45 @@
+        // Update allResults array with the new page of results
+        const updatedAllResults = [...(state.allResults || [])]
+        updatedAllResults[currentPage - 1] = newResults
+
+        console.log(`Received page ${currentPage} results:`, {
+          resultsCount: newResults.length,
+          totalPages,
+          totalResults
+        })
+
+        setState((prev) => {
+          // For a new search, we want to replace results
+          // For pagination, we want to show just the current page
+          const displayResults = newResults
+
+          // If this is a new search, clear all previous results
+          if (isNewSearch) {
+            return {
+              ...prev,
+              results: [
+                ...prev.results.filter(r => r.isCustomUrl),
+                ...displayResults
+              ],
+              currentPage,
+              totalPages,
+              totalResults,
+              allResults: updatedAllResults,
+              error: null,
+            }
+          }
+
+          // For pagination, show the current page results
+          return {
+            ...prev,
+            results: [
+              ...prev.results.filter(r => r.isCustomUrl || prev.selectedResults.includes(r.id)),
+              ...displayResults
+            ],
+            currentPage,
+            totalPages,
+            totalResults,
+            allResults: updatedAllResults,
+            error: null,
+          }
+        })

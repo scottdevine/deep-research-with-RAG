@@ -1,0 +1,44 @@
+  // Define a function to handle page changes
+  const handlePageChangeImpl = (newPage: number) => {
+    console.log(`Changing to page ${newPage}, current state:`, {
+      currentPage: state.currentPage,
+      totalPages: state.totalPages,
+      hasStoredPage: state.allResults[newPage - 1]?.length > 0,
+      resultsPrioritized: state.resultsPrioritized
+    })
+    
+    // Check if we already have this page in our allResults array
+    if (state.allResults[newPage - 1]?.length > 0) {
+      console.log(`Using cached results for page ${newPage}:`, state.allResults[newPage - 1])
+      // We already have this page, just update the current page and display those results
+      setState((prev) => ({
+        ...prev,
+        currentPage: newPage,
+        results: [
+          ...prev.results.filter(
+            (r) => r.isCustomUrl || prev.selectedResults.includes(r.id)
+          ),
+          ...prev.allResults[newPage - 1],
+        ],
+      }))
+    } else {
+      // If results are prioritized, we shouldn't fetch new results
+      // as all prioritized results should already be in allResults
+      if (state.resultsPrioritized) {
+        console.warn('Attempted to navigate to a page beyond prioritized results')
+        toast({
+          title: 'Navigation Error',
+          description: 'Cannot navigate beyond prioritized results',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      console.log(`Fetching new results for page ${newPage}`)
+      // We need to fetch this page
+      setState((prev) => ({ ...prev, currentPage: newPage }))
+      // Create a synthetic event to trigger the search
+      const event = { preventDefault: () => {}, type: 'pagination' } as React.FormEvent
+      handleSearch(event)
+    }
+  }

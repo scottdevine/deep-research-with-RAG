@@ -1,0 +1,272 @@
+  // Memoized search handler
+  const handleSearch = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (!state.query.trim()) return
+
+      const isGeneratingReport =
+        state.selectedResults.length > 0 && !state.isAgentMode
+
+      if (isGeneratingReport) {
+        updateStatus({ generatingReport: true })
+        updateState({ error: null })
+        const initialFetchStatus: Status['fetchStatus'] = {
+          total: state.selectedResults.length,
+          successful: 0,
+          fallback: 0,
+          sourceStatuses: {},
+        }
+        updateStatus({ fetchStatus: initialFetchStatus })
+
+        try {
+          const selectedResults = state.results.filter((result) =>
+            state.selectedResults.includes(result.id)
+          )
+
+          const contentResults = await Promise.all(
+            selectedResults.map(async (article) => {
+              // If the article already has content (e.g. from file upload), use it directly
+              if (article.content) {
+                updateStatus((prev: Status) => ({
+                  ...prev,
+                  fetchStatus: {
+                    ...prev.fetchStatus,
+                    successful: prev.fetchStatus.successful + 1,
+                    sourceStatuses: {
+                      ...prev.fetchStatus.sourceStatuses,
+                      [article.url]: 'fetched' as const,
+                    },
+                  },
+                }))
+                return {
+                  url: article.url,
+                  title: article.name,
+                  content: article.content,
+                }
+              }
+
+              try {
+                const { content } = await fetchContent(article.url)
+                if (content) {
+                  updateStatus((prev: Status) => ({
+                    ...prev,
+                    fetchStatus: {
+                      ...prev.fetchStatus,
+                      successful: prev.fetchStatus.successful + 1,
+                      sourceStatuses: {
+                        ...prev.fetchStatus.sourceStatuses,
+                        [article.url]: 'fetched' as const,
+                      },
+                    },
+                  }))
+                  return { url: article.url, title: article.name, content }
+                }
+              } catch (error) {
+                if (error instanceof Error && error.message.includes('429'))
+                  throw error
+              }
+
+              updateStatus((prev: Status) => ({
+                ...prev,
+                fetchStatus: {
+                  ...prev.fetchStatus,
+                  fallback: prev.fetchStatus.fallback + 1,
+                  sourceStatuses: {
+                    ...prev.fetchStatus.sourceStatuses,
+                    [article.url]: 'preview' as const,
+                  },
+                },
+              }))
+
+              return {
+                url: article.url,
+                title: article.name,
+                content: article.snippet,
+              }
+            })
+          )
+
+          const reportResponse = await retryWithBackoff(() =>
+            fetch('/api/report', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                selectedResults: contentResults.filter((r) => r.content?.trim()),
+                sources: selectedResults,
+                prompt: state.reportPrompt,
+                platformModel: state.selectedModel,
+              }),
+            }).then((res) => res.json())
+          )
+
+          updateState({
+            report: reportResponse,
+            activeTab: 'report',
+          })
+        } catch (error) {
+          handleError(error, 'Report Generation Error')
+        } finally {
+          updateStatus({ generatingReport: false })
+        }
+        return
+      }
+
+      updateStatus({ loading: true })
+      updateState({ error: null })
+
+      try {
+        // If this is a new search (not pagination), reset pagination state
+        const isNewSearch = e.type === 'submit'
+        const pageToFetch = isNewSearch ? 1 : state.currentPage
+
+        console.log('Client-side search with includePubMed:', state.includePubMed)
+
+        const requestBody = {
+          query: state.query,
+          timeFilter: state.timeFilter,
+          page: pageToFetch,
+          includePubMed: state.includePubMed,
+        }
+
+        console.log('Search request body:', requestBody)
+
+        const response = await retryWithBackoff(async () => {
+          const res = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+          })
+
+          if (!res.ok) {
+            const errorData = await res
+              .json()
+              .catch(() => ({ error: 'Search failed' }))
+            throw new Error(errorData.error || `Search failed: ${res.status}`)
+          }
+
+          return res.json()
+        })
+
+        const newResults = (response.webPages?.value || []).map(
+          (result: SearchResult, index: number) => ({
+            ...result,
+            id: `search-page${pageToFetch}-${index}-${result.id || encodeURIComponent(result.url)}`,
+          })
+        )
+
+        // Extract pagination information
+        const { currentPage, totalPages, totalResults } = response.pagination || {
+          currentPage: pageToFetch,
+          totalPages: 1,
+          totalResults: newResults.length
+        }
+
+        // Update allResults array with the new page of results
+        const updatedAllResults = [...(state.allResults || [])]
+        updatedAllResults[currentPage - 1] = newResults
+
+        console.log(`Received page ${currentPage} results:`, {
+          resultsCount: newResults.length,
+          totalPages,
+          totalResults
+        })
+
+        setState((prev) => {
+          // For a new search, we want to replace results
+          // For pagination, we want to show just the current page
+          const displayResults = newResults
+
+          // If this is a new search, clear all previous results
+          if (isNewSearch) {
+            return {
+              ...prev,
+              results: [
+                ...prev.results.filter(r => r.isCustomUrl),
+                ...displayResults
+              ],
+              currentPage,
+              totalPages,
+              totalResults,
+              allResults: updatedAllResults,
+              error: null,
+            }
+          }
+
+          // For pagination, show the current page results
+          return {
+            ...prev,
+            results: [
+              ...prev.results.filter(r => r.isCustomUrl || prev.selectedResults.includes(r.id)),
+              ...displayResults
+            ],
+            currentPage,
+            totalPages,
+            totalResults,
+            allResults: updatedAllResults,
+            error: null,
+          }
+        })
+      } catch (error) {
+        handleError(error, 'Search Error')
+      } finally {
+        updateStatus({ loading: false })
+      }
+    },
+    [
+      state.query,
+      state.timeFilter,
+      state.selectedResults,
+      state.selectedModel,
+      state.results,
+      state.isAgentMode,
+      fetchContent,
+      handleError,
+      updateStatus,
+      updateState,
+    ]
+  )
+
+  // Define a function to handle page changes
+  const handlePageChangeImpl = (newPage: number) => {
+    console.log(`Changing to page ${newPage}, current state:`, {
+      currentPage: state.currentPage,
+      totalPages: state.totalPages,
+      hasStoredPage: state.allResults[newPage - 1]?.length > 0,
+      resultsPrioritized: state.resultsPrioritized
+    })
+    
+    // Check if we already have this page in our allResults array
+    if (state.allResults[newPage - 1]?.length > 0) {
+      console.log(`Using cached results for page ${newPage}:`, state.allResults[newPage - 1])
+      // We already have this page, just update the current page and display those results
+      setState((prev) => ({
+        ...prev,
+        currentPage: newPage,
+        results: [
+          ...prev.results.filter(
+            (r) => r.isCustomUrl || prev.selectedResults.includes(r.id)
+          ),
+          ...prev.allResults[newPage - 1],
+        ],
+      }))
+    } else {
+      // If results are prioritized, we shouldn't fetch new results
+      // as all prioritized results should already be in allResults
+      if (state.resultsPrioritized) {
+        console.warn('Attempted to navigate to a page beyond prioritized results')
+        toast({
+          title: 'Navigation Error',
+          description: 'Cannot navigate beyond prioritized results',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      console.log(`Fetching new results for page ${newPage}`)
+      // We need to fetch this page
+      setState((prev) => ({ ...prev, currentPage: newPage }))
+      // Create a synthetic event to trigger the search
+      const event = { preventDefault: () => {}, type: 'pagination' } as React.FormEvent
+      handleSearch(event)
+    }
+  }

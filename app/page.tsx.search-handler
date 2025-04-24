@@ -1,0 +1,209 @@
+  // Memoized search handler
+  const handleSearch = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (!state.query.trim()) return
+
+      const isGeneratingReport =
+        state.selectedResults.length > 0 && !state.isAgentMode
+
+      if (isGeneratingReport) {
+        updateStatus({ generatingReport: true })
+        updateState({ error: null })
+        const initialFetchStatus: Status['fetchStatus'] = {
+          total: state.selectedResults.length,
+          successful: 0,
+          fallback: 0,
+          sourceStatuses: {},
+        }
+        updateStatus({ fetchStatus: initialFetchStatus })
+
+        try {
+          const selectedResults = state.results.filter((result) =>
+            state.selectedResults.includes(result.id)
+          )
+
+          const contentResults = await Promise.all(
+            selectedResults.map(async (article) => {
+              // If the article already has content (e.g. from file upload), use it directly
+              if (article.content) {
+                updateStatus((prev: Status) => ({
+                  ...prev,
+                  fetchStatus: {
+                    ...prev.fetchStatus,
+                    successful: prev.fetchStatus.successful + 1,
+                    sourceStatuses: {
+                      ...prev.fetchStatus.sourceStatuses,
+                      [article.url]: 'fetched' as const,
+                    },
+                  },
+                }))
+                return {
+                  url: article.url,
+                  title: article.name,
+                  content: article.content,
+                }
+              }
+
+              try {
+                const { content } = await fetchContent(article.url)
+                if (content) {
+                  updateStatus((prev: Status) => ({
+                    ...prev,
+                    fetchStatus: {
+                      ...prev.fetchStatus,
+                      successful: prev.fetchStatus.successful + 1,
+                      sourceStatuses: {
+                        ...prev.fetchStatus.sourceStatuses,
+                        [article.url]: 'fetched' as const,
+                      },
+                    },
+                  }))
+                  return { url: article.url, title: article.name, content }
+                }
+              } catch (error) {
+                if (error instanceof Error && error.message.includes('429'))
+                  throw error
+              }
+
+              updateStatus((prev: Status) => ({
+                ...prev,
+                fetchStatus: {
+                  ...prev.fetchStatus,
+                  fallback: prev.fetchStatus.fallback + 1,
+                  sourceStatuses: {
+                    ...prev.fetchStatus.sourceStatuses,
+                    [article.url]: 'preview' as const,
+                  },
+                },
+              }))
+
+              return {
+                url: article.url,
+                title: article.name,
+                content: article.snippet,
+              }
+            })
+          )
+
+          const reportResponse = await retryWithBackoff(() =>
+            fetch('/api/report', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                selectedResults: contentResults.filter((r) => r.content?.trim()),
+                sources: selectedResults,
+                prompt: state.reportPrompt,
+                platformModel: state.selectedModel,
+              }),
+            }).then((res) => res.json())
+          )
+
+          updateState({
+            report: reportResponse,
+            activeTab: 'report',
+          })
+        } catch (error) {
+          handleError(error, 'Report Generation Error')
+        } finally {
+          updateStatus({ generatingReport: false })
+        }
+        return
+      }
+
+      updateStatus({ loading: true })
+      updateState({ error: null })
+
+      try {
+        // Always fetch all results at once
+        console.log('Client-side search with includePubMed:', state.includePubMed)
+
+        const requestBody = {
+          query: state.query,
+          timeFilter: state.timeFilter,
+          fetchAll: true, // New parameter to fetch all results at once
+          includePubMed: state.includePubMed,
+        }
+
+        console.log('Search request body:', requestBody)
+
+        const response = await retryWithBackoff(async () => {
+          const res = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+          })
+
+          if (!res.ok) {
+            const errorData = await res
+              .json()
+              .catch(() => ({ error: 'Search failed' }))
+            throw new Error(errorData.error || `Search failed: ${res.status}`)
+          }
+
+          return res.json()
+        })
+
+        // Process all results with unique IDs
+        const allResults = (response.webPages?.value || []).map(
+          (result: SearchResult, index: number) => ({
+            ...result,
+            id: `search-${index}-${result.id || encodeURIComponent(result.url)}`,
+          })
+        )
+
+        console.log(`Received ${allResults.length} total results`)
+
+        // Extract pagination information
+        const { totalPages, totalResults } = response.pagination || {
+          totalPages: Math.ceil(allResults.length / CONFIG.search.resultsPerPage),
+          totalResults: allResults.length
+        }
+
+        // Create pages for client-side pagination
+        const resultsPerPage = CONFIG.search.resultsPerPage
+        const paginatedResults: SearchResult[][] = []
+
+        // Distribute results across pages
+        for (let i = 0; i < allResults.length; i += resultsPerPage) {
+          const pageIndex = Math.floor(i / resultsPerPage)
+          paginatedResults[pageIndex] = allResults.slice(i, i + resultsPerPage)
+        }
+
+        console.log(`Created ${paginatedResults.length} pages of results`)
+
+        // Set the first page as the current results
+        const currentPage = 1
+        const displayResults = paginatedResults[0] || []
+
+        setState((prev) => ({
+          ...prev,
+          results: [
+            ...prev.results.filter(r => r.isCustomUrl),
+            ...displayResults
+          ],
+          currentPage,
+          totalPages,
+          totalResults,
+          allResults: paginatedResults,
+          error: null,
+        }))
+      } catch (error) {
+        handleError(error, 'Search Error')
+      } finally {
+        updateStatus({ loading: false })
+      }
+    },
+    [
+      state.query,
+      state.timeFilter,
+      state.selectedResults,
+      state.selectedModel,
+      state.results,
+      state.isAgentMode,
+      fetchContent,
+      handleError,
+      updateStatus,
+      updateState,
+    ]
+  )

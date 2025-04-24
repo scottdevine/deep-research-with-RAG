@@ -1,0 +1,65 @@
+  // Function to fetch multiple pages of search results (up to 100 results)
+  const fetchMultiplePages = useCallback(async (maxResults = 100) => {
+    if (!state.query.trim() || state.status.loading) return []
+
+    updateStatus({ loading: true })
+    updateState({ error: null })
+
+    try {
+      console.log('Fetching multiple pages, up to', maxResults, 'results')
+      
+      // Use the fetchAll parameter to get all results at once
+      const response = await retryWithBackoff(async () => {
+        const res = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: state.query,
+            timeFilter: state.timeFilter,
+            fetchAll: true,
+            includePubMed: state.includePubMed,
+          }),
+        })
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ error: 'Search failed' }))
+          throw new Error(errorData.error || `Search failed: ${res.status}`)
+        }
+
+        return res.json()
+      })
+
+      // Process all results with unique IDs
+      const allResults = (response.webPages?.value || []).map(
+        (result: SearchResult, index: number) => ({
+          ...result,
+          id: `search-all-${index}-${result.id || encodeURIComponent(result.url)}`,
+        })
+      )
+
+      console.log(`Fetched ${allResults.length} total results`)
+
+      // Limit to maxResults
+      const finalResults = allResults.slice(0, maxResults)
+      
+      // Calculate pagination info for client-side use
+      const totalResults = finalResults.length
+      const totalPages = Math.ceil(totalResults / CONFIG.search.resultsPerPage)
+
+      return {
+        results: finalResults,
+        totalPages,
+        totalResults
+      }
+    } catch (error) {
+      console.error('Error fetching multiple pages:', error)
+      handleError(error, 'Search Error')
+      return {
+        results: [],
+        totalPages: 0,
+        totalResults: 0
+      }
+    } finally {
+      updateStatus({ loading: false })
+    }
+  }, [state.query, state.timeFilter, state.includePubMed, updateStatus, updateState, handleError])
